@@ -29,8 +29,8 @@ class N0t3b00kChecker(BaseChecker):
     flag_variants = 1
     noise_variants = 1
     havoc_variants = 3
-    service_name = "n0t3b00k"
-    port = 2323  # The port will automatically be picked up as default by self.connect and self.http.
+    service_name = "activitytracker"
+    port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
     ##### END CHECKER PARAMETERS
 
     def register_user(self, conn: SimpleSocket, username: str, password: str):
