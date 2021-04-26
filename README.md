@@ -1,5 +1,8 @@
-n0t3b00k example service
+Activity Tracker example service
 ====================
+
+TODO: Update readme.md
+
 Example service to provide students a project strucutre. n0t3b00k is a simple service that allows users to register, login and save/retrieve notes. 
 
 -----------------------------------------------
