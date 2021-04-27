@@ -2,3 +2,5 @@ poetry.lock
 pyproject.toml
 
 .idea
+
+service/src/activitytracker/target

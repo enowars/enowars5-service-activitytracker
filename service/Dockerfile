@@ -1,5 +1,5 @@
 # Use a suitable base-image.
-FROM python:3-alpine
+FROM liuchong/rustup
 
 # Create a seperate user and chown new directories if necessary
 RUN addgroup --system service
@@ -19,6 +19,9 @@ COPY src/ /service/
 WORKDIR /service/
 # Expose the service's port
 EXPOSE 8000
+
+RUN rustup default nightly
+RUN cargo build
 
 # Run the service
 ENTRYPOINT ["/entrypoint.sh"]
