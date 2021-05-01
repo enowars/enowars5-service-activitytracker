@@ -26,20 +26,20 @@ pub fn establish_connection() -> PgConnection {
 
 
 #[get("/")]
-fn index() -> &'static str {
-    "Hello, world!"
-}
-
-fn main() {
+fn index() -> String {
     use schema::posts::dsl::*;
 
     let connection = establish_connection();
+
     let results = posts.filter(deleted.eq(false))
         .limit(5)
         .load::<models::Post>(&connection)
         .expect("Error loading posts");
 
-    println!("There are {} posts.", results.len());
+    format!("There are {} posts.", results.len())
+}
+
+fn main() {
 
     rocket::ignite().mount("/", routes![index]).launch();
 }
