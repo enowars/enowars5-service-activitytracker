@@ -2,12 +2,14 @@
 
 pub mod schema;
 pub mod models;
+pub mod views;
 
 #[macro_use]
 extern crate rocket;
 #[macro_use]
 extern crate diesel;
 extern crate dotenv;
+use rocket_contrib::templates::Template;
 
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
@@ -41,5 +43,7 @@ fn index() -> String {
 
 fn main() {
 
-    rocket::ignite().mount("/", routes![index]).launch();
+    rocket::ignite().mount("/", routes![
+        views::posts::get_posts
+    ]).attach(Template::fairing()).launch();
 }

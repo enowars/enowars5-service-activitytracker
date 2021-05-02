@@ -4,9 +4,10 @@ use crate::diesel::RunQueryDsl;
 use crate::models::posts::posts::dsl as dsl;
 use crate::diesel::prelude::*;
 
+use serde::Serialize;
 
 
-#[derive(Queryable)]
+#[derive(Queryable, Serialize)]
 pub struct Post {
     pub id: i32,
     pub body: String,
