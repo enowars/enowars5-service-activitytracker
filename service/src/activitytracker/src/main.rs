@@ -33,7 +33,7 @@ fn index() -> String {
 
     let results = posts.filter(deleted.eq(false))
         .limit(5)
-        .load::<models::Post>(&connection)
+        .load::<models::posts::Post>(&connection)
         .expect("Error loading posts");
 
     format!("There are {} posts.", results.len())
