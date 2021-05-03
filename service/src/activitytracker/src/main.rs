@@ -44,6 +44,8 @@ fn index() -> String {
 fn main() {
 
     rocket::ignite().mount("/", routes![
-        views::posts::get_posts
+        views::posts::get_posts,
+        views::posts::new,
+        views::posts::insert,
     ]).attach(Template::fairing()).launch();
 }

@@ -11,6 +11,7 @@ rocket = "0.4.7"
 diesel = { version = "1.4.4", features = ["postgres"] }
 dotenv = "0.15.0"
 serde = { version = "1.0.125", features = ["derive"] }
+rocket-multipart-form-data = "0.9.6"
 
 [dependencies.rocket_contrib]
 version = "0.4.7"

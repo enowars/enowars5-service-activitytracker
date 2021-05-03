@@ -24,30 +24,31 @@
 <div class="container my-5">
     <div class="row">
         <div class="col">
-            <h1 class="display-1">Posts! <a class="btn btn-primary btn-lg float-right" href="/posts/new">Write a new
-                Post!</a></h1>
+            <h1 class="display-1">Creating new post! <a class="btn btn-primary btn-lg float-right" href="/posts">Get me out of here!</a></h1>
             <hr>
-            <div class="alert alert-info">{{ data[1] }}</div>
         </div>
     </div>
     <div class="row">
-
-        {% for post in data[0] %}
-            <div class="col-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="my-2">
-                            Post
-                            <a class="btn btn-sm btn-secondary float-right ml-2" href="/posts/update/{{post.id}}">Edit</a>
-                            <a class="btn btn-sm btn-danger float-right" href="/posts/delete/{{post.id}}">Delete</a>
-                        </h3>
-                    </div>
-                    <div class="card-body">
-                        {{post.body}}
+        <form enctype="multipart/form-data" style="width: 100%" method="POST" action="/posts/insert">
+            <div class="col">
+                <hr>
+                <div class="form-group">
+                    <div class="row">
+                        <div class="col">
+                            <label for="body">Post body:<span style="color: red">*</span></label>
+                            <textarea required placeholder="Hello world!" name="body"
+                                   id="body" class="form-control"> </textarea>
+                        </div>
                     </div>
                 </div>
+                <button class="btn btn-primary btn-block btn-large">Post it!</button>
+                {% if flash %}
+                    <div class="alert alert-danger">
+                        {{ flash }}
+                    </div>
+                {% endif %}
             </div>
-        {% endfor %}
+        </form>
     </div>
 </div>
 

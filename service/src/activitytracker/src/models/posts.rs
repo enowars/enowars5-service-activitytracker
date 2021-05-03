@@ -14,7 +14,7 @@ pub struct Post {
     pub deleted: bool,
 }
 
-#[derive(Insertable)]
+#[derive(Insertable, AsChangeset)]
 #[table_name="posts"]
 pub struct NewPost<'a> {
     pub body: &'a str,
