@@ -47,5 +47,8 @@ fn main() {
         views::posts::get_posts,
         views::posts::new,
         views::posts::insert,
+        views::posts::update,
+        views::posts::process_update,
+        views::posts::delete,
     ]).attach(Template::fairing()).launch();
 }
