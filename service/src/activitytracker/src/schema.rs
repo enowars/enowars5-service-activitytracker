@@ -18,9 +18,9 @@ table! {
 table! {
     users (id) {
         id -> Int4,
-        username -> Varchar,
-        password_hash -> Varchar,
-        admin -> Bool,
+        email -> Varchar,
+        password -> Varchar,
+        is_admin -> Bool,
     }
 }
 

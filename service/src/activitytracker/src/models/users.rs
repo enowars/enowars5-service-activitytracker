@@ -8,22 +8,22 @@ use crate::diesel::prelude::*;
 #[derive(Queryable)]
 pub struct User {
     pub id: i32,
-    pub username: String,
-    pub password_hash: String,
-    pub admin: bool,
+    pub email: String,
+    pub password: String,
+    pub is_admin: bool,
 }
 
 #[derive(Insertable)]
 #[table_name="users"]
 pub struct NewUser<'a> {
-    pub username: &'a str,
-    pub password_hash: &'a str,
-    pub admin: bool
+    pub email: &'a str,
+    pub password: &'a str,
+    pub is_admin: bool,
 }
 
-pub fn create_user(conn: &PgConnection, username: &str, password_hash: &str, admin: bool) -> User {
+pub fn create_user(conn: &PgConnection, email: &str, password: &str, is_admin: bool) -> User {
     let new_user = NewUser {
-        username, password_hash, admin
+        email, password, is_admin
     };
 
     diesel::insert_into(users::table)
@@ -32,9 +32,9 @@ pub fn create_user(conn: &PgConnection, username: &str, password_hash: &str, adm
         .expect("Error creating user.")
 }
 
-pub fn update_user(conn: &PgConnection, id: i32, password_hash: &str) -> User {
+pub fn update_user(conn: &PgConnection, id: i32, password: &str) -> User {
     diesel::update(dsl::users.find(id))
-        .set(dsl::password_hash.eq(password_hash))
+        .set(dsl::password.eq(password))
         .get_result(conn)
         .expect("Error updating user.")
 }

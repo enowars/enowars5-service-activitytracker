@@ -1,0 +1,19 @@
+{% extends "base" %}
+
+{% block title %} Login {% endblock %}
+
+{% block heading %} Login! {% endblock %}
+
+{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Back!</a> {% endblock %}
+
+{% block content %}
+    <form action="/auth/login" method="post">
+        <label for="email"><b>Email</b></label>
+        <input type="text" placeholder="email address" name="email" required>
+
+        <label for="password"><b>Password</b></label>
+        <input type="password" placeholder="password" name="password" required>
+
+        <button type="submit">Login</button>
+    </form>
+{% endblock %}

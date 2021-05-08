@@ -1,0 +1,30 @@
+{% extends "base" %}
+
+{% block title %} Posts {% endblock %}
+
+{% block heading %} New Post! {% endblock %}
+
+{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Get me out of here!</a> {% endblock %}
+
+{% block content %}
+    <form enctype="multipart/form-data" style="width: 100%" method="POST" action="/posts/insert">
+        <div class="col">
+            <hr>
+            <div class="form-group">
+                <div class="row">
+                    <div class="col">
+                        <label for="body">Post body:<span style="color: red">*</span></label>
+                        <textarea required placeholder="Hello world!" name="body"
+                                  id="body" class="form-control"> </textarea>
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-block btn-large">Post it!</button>
+            {% if err %}
+                <div class="alert alert-danger">
+                    {{ err }}
+                </div>
+            {% endif %}
+        </div>
+    </form>
+{% endblock %}

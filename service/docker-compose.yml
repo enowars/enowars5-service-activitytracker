@@ -11,14 +11,14 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
-      - 5469:5432
+      - 5469:5432 # TODO remove this!
 
   pgadmin:
     image: dpage/pgadmin4
     depends_on:
       - postgres
     ports:
-      - 5555:80
+      - 5555:80 # TODO remove this!
     environment:
       PGADMIN_DEFAULT_EMAIL: richard@enoflag.de
       PGADMIN_DEFAULT_PASSWORD: enoflag

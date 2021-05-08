@@ -12,8 +12,13 @@ diesel = { version = "1.4.4", features = ["postgres"] }
 dotenv = "0.15.0"
 serde = { version = "1.0.125", features = ["derive"] }
 rocket-multipart-form-data = "0.9.6"
+serde_json = "1.0.64"
 
 [dependencies.rocket_contrib]
 version = "0.4.7"
 default-features = false
 features = ["tera_templates"]
+
+[dependencies.rocket_auth]
+version = "0.3.0"
+features = ["postgres-db"]

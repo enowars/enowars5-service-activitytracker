@@ -10,11 +10,14 @@ extern crate rocket;
 extern crate diesel;
 extern crate dotenv;
 use rocket_contrib::templates::Template;
+use rocket_auth::Users;
+
 
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
 use dotenv::dotenv;
 use std::env;
+use rocket::response::Redirect;
 
 
 pub fn establish_connection() -> PgConnection {
@@ -28,27 +31,40 @@ pub fn establish_connection() -> PgConnection {
 
 
 #[get("/")]
-fn index() -> String {
-    use schema::posts::dsl::*;
-
-    let connection = establish_connection();
-
-    let results = posts.filter(deleted.eq(false))
-        .limit(5)
-        .load::<models::posts::Post>(&connection)
-        .expect("Error loading posts");
-
-    format!("There are {} posts.", results.len())
+fn index() -> Redirect {
+    // use schema::posts::dsl::*;
+    //
+    // let connection = establish_connection();
+    //
+    // let results = posts.filter(deleted.eq(false))
+    //     .limit(5)
+    //     .load::<models::posts::Post>(&connection)
+    //     .expect("Error loading posts");
+    //
+    // format!("There are {} posts.", results.len())
+    Redirect::to("/posts")
 }
 
 fn main() {
 
+    let users = rocket_auth::Users::open_postgres("host=localhost user=diesel password='diesel'").unwrap();
+
     rocket::ignite().mount("/", routes![
+        index,
         views::posts::get_posts,
         views::posts::new,
         views::posts::insert,
         views::posts::update,
         views::posts::process_update,
         views::posts::delete,
-    ]).attach(Template::fairing()).launch();
+        views::auth::get_login,
+        views::auth::post_login,
+        views::auth::get_signup,
+        views::auth::post_signup,
+        views::auth::logout,
+        views::auth::delete
+    ])
+        .manage(users)
+        .attach(Template::fairing())
+        .launch();
 }
