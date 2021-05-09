@@ -19,13 +19,10 @@ use serde_json::json;
 
 #[get("/posts")]
 pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>) -> Template {
-    let posts: Vec<Post> = posts::table
-        .filter(posts::deleted.eq(false))
-        .load::<Post>(&crate::establish_connection())
-        .expect("Could not get posts");
+    let uap = UsersAndPosts::load_all(&crate::establish_connection());
 
     Template::render("posts/post_list", json!({
-            "data": posts,
+            "data": uap,
             "flash": match flash {
                 Some(ref msg) => msg.msg(),
                 None => "List of posts"
@@ -52,11 +49,14 @@ pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
 
 #[post("/posts/insert", data = "<post_data>")]
 pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
+    use std::fs;
 
     /* Define the form */
     let mut options = MultipartFormDataOptions::new();
     options.allowed_fields = vec![
         MultipartFormDataField::text("body"),
+        MultipartFormDataField::text("visibility"),
+        MultipartFormDataField::file("image"),
     ];
 
     /* Match the form */
@@ -64,12 +64,35 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
 
     match multipart_form_data {
         Ok(form) => {
+            let image = match form.files.get("image") {
+                Some(img) => {
+                    let file_field = &img[0];
+                    let _content_type = &file_field.content_type;
+                    let _file_name = &file_field.file_name;
+                    let _path = &file_field.path;
+
+                    let format: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
+
+                    let absolute_path: String = format!("imgs/{}", _file_name.clone().unwrap());
+                    fs::copy(_path, &absolute_path).unwrap();
+
+                    Some(format!("imgs/{}", _file_name.clone().unwrap()))
+                }
+                None => None,
+            };
             /* Insert data into database */
             create_post(&crate::establish_connection(),
                         match form.texts.get("body") {
                             Some(value) => &value[0].text,
                             None => "",
-                        });
+                        },
+                        match form.texts.get("visibility") {
+                            Some(value) => &value[0].text,
+                            None => "private",
+                        },
+                        image,
+                        user.id()
+            );
 
             Flash::success(
                 Redirect::to("/posts"),
@@ -115,16 +138,36 @@ pub fn update(user: User, flash: Option<FlashMessage>, id: i32) -> Template {
 
 #[post("/posts/update", data = "<post_data>")]
 pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
+    use std::fs;
+
     let mut options = MultipartFormDataOptions::new();
     options.allowed_fields = vec![
         MultipartFormDataField::text("id"),
         MultipartFormDataField::text("body"),
+        MultipartFormDataField::text("visibility"),
+        MultipartFormDataField::file("image"),
     ];
 
     let multipart_form_data = MultipartFormData::parse(content_type, post_data, options);
 
     match multipart_form_data {
         Ok(form) => {
+            let image = match form.files.get("image") {
+                Some(img) => {
+                    let file_field = &img[0];
+                    let _content_type = &file_field.content_type;
+                    let _file_name = &file_field.file_name;
+                    let _path = &file_field.path;
+
+                    let format: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
+
+                    let absolute_path: String = format!("imgs/{}", _file_name.clone().unwrap());
+                    fs::copy(_path, &absolute_path).unwrap();
+
+                    Some(format!("imgs/{}", _file_name.clone().unwrap()))
+                }
+                None => None,
+            };
 
             update_post(&crate::establish_connection(),
                         form.texts.get("id").unwrap()[0]
@@ -132,9 +175,15 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
                             .parse::<i32>()
                             .unwrap(),
                         match form.texts.get("body") {
-                            Some(value) => &value[0].text,
-                            None => "",
-                        });
+                            Some(value) => Some(&value[0].text),
+                            None => None,
+                        },
+                        match form.texts.get("visibility") {
+                            Some(value) => Some(&value[0].text),
+                            None => None,
+                        },
+                        image
+            );
             Flash::success(
                 Redirect::to("/posts"),
                 "Success! Post updated!",

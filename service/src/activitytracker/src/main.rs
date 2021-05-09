@@ -12,6 +12,9 @@ extern crate dotenv;
 use rocket_contrib::templates::Template;
 use rocket_auth::Users;
 
+use std::path::{Path, PathBuf};
+use rocket::response::NamedFile;
+
 
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
@@ -45,12 +48,19 @@ fn index() -> Redirect {
     Redirect::to("/posts")
 }
 
+/* Static files Handler */
+#[get("/imgs/<file..>")]
+fn assets(file: PathBuf) -> Option<NamedFile> {
+    NamedFile::open(Path::new("imgs/").join(file)).ok()
+}
+
 fn main() {
 
     let users = rocket_auth::Users::open_postgres("host=localhost user=diesel password='diesel'").unwrap();
 
     rocket::ignite().mount("/", routes![
         index,
+        assets,
         views::posts::get_posts,
         views::posts::new,
         views::posts::insert,

@@ -1,28 +1,56 @@
 use diesel::pg::PgConnection;
 use crate::schema::posts;
+use crate::schema::users;
 use crate::diesel::RunQueryDsl;
 use crate::models::posts::posts::dsl as dsl;
 use crate::diesel::prelude::*;
 
-use serde::Serialize;
+use serde::{Serialize};
+use crate::models::users::User;
+use rocket_auth::Users;
 
 
-#[derive(Queryable, Serialize)]
+#[derive(Queryable, Serialize, Associations, Identifiable)]
+#[belongs_to(User, foreign_key = "user_id")]
 pub struct Post {
     pub id: i32,
     pub body: String,
     pub deleted: bool,
+    pub visibility: String,
+    pub image: Option<String>,
+    pub user_id: i32
 }
 
 #[derive(Insertable, AsChangeset)]
 #[table_name="posts"]
 pub struct NewPost<'a> {
     pub body: &'a str,
+    pub visibility: &'a str,
+    pub image: Option<String>,
+    pub user_id: i32,
 }
 
-pub fn create_post(conn: &PgConnection, body: &str) -> Post {
+#[derive(Serialize)]
+pub struct UsersAndPosts(User, Vec<Post>);
+impl From<(User, Vec<Post>)> for UsersAndPosts {
+    fn from(elements: (User, Vec<Post>)) -> Self {
+        UsersAndPosts(elements.0, elements.1)
+    }
+}
+impl UsersAndPosts {
+    pub fn load_all(conn: &PgConnection) -> Vec<UsersAndPosts>{
+        let users = users::table.load::<User>(conn).expect("Error loading users");
+        let posts = Post::belonging_to(&users)
+            .filter(posts::deleted.eq(false))
+            .load::<Post>(conn).expect("Error loading posts")
+            .grouped_by(&users);
+        users.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>()
+    }
+}
+
+pub fn create_post(conn: &PgConnection, body: &str, visibility: &str, image: Option<String>, user_id: i32) -> Post {
     let new_post = NewPost {
-        body,
+        body, visibility, image, user_id
     };
 
     diesel::insert_into(posts::table)
@@ -31,11 +59,38 @@ pub fn create_post(conn: &PgConnection, body: &str) -> Post {
         .expect("Error saving post.")
 }
 
-pub fn update_post(conn: &PgConnection, id: i32, body: &str) -> Post {
-    diesel::update(dsl::posts.find(id))
-        .set(dsl::body.eq(body))
-        .get_result(conn)
-        .expect("Error updating post.")
+pub fn update_post(conn: &PgConnection, id: i32, body: Option<&str>, visibility: Option<&str>, image: Option<String>) -> Post {
+    match body {
+        Some(b) => {diesel::update(dsl::posts.find(id))
+            .set(dsl::body.eq(b))
+            .get_result::<Post>(conn)
+            .expect("Error updating post.");
+            ()
+        },
+        None => ()
+    };
+    match visibility {
+        Some(v) => {
+            diesel::update(dsl::posts.find(id))
+                .set(dsl::visibility.eq(v))
+                .get_result::<Post>(conn)
+                .expect("Error updating post.");
+            ()
+        },
+        None => ()
+    };
+    match image {
+        Some(i) => {
+            diesel::update(dsl::posts.find(id))
+                .set(dsl::image.eq(i))
+                .get_result::<Post>(conn)
+                .expect("Error updating post.");
+            ()
+        },
+        None => ()
+    };
+    posts::table.filter(dsl::id.eq(id)).first(conn).expect("Error loading post.")
+
 }
 
 pub fn delete_post(conn: &PgConnection, id: i32) -> usize {

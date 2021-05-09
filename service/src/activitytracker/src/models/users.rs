@@ -3,9 +3,10 @@ use crate::schema::users;
 use crate::diesel::RunQueryDsl;
 use crate::models::users::users::dsl as dsl;
 use crate::diesel::prelude::*;
+use serde::{Serialize};
 
 
-#[derive(Queryable)]
+#[derive(Queryable, Identifiable, Serialize)]
 pub struct User {
     pub id: i32,
     pub email: String,
