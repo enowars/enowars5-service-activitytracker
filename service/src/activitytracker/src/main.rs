@@ -56,7 +56,7 @@ fn assets(file: PathBuf) -> Option<NamedFile> {
 
 fn main() {
 
-    let users = rocket_auth::Users::open_postgres("host=localhost user=diesel password='diesel'").unwrap();
+    let users = rocket_auth::Users::open_postgres("host=postgres user=diesel password='diesel'").unwrap();
 
     rocket::ignite().mount("/", routes![
         index,

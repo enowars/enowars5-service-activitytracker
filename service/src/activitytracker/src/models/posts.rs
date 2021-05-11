@@ -42,8 +42,7 @@ impl UsersAndPosts {
         let users = users::table.load::<User>(conn).expect("Error loading users");
         let posts = Post::belonging_to(&users)
             .filter(posts::deleted.eq(false))
-            .filter(posts::visibility.eq("public"))
-            .or_filter(posts::user_id.eq(email_id))
+            .filter(posts::visibility.eq("public").or(posts::user_id.eq(email_id)))
             .load::<Post>(conn).expect("Error loading posts")
             .grouped_by(&users);
         users.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>()

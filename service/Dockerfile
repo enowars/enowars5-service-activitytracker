@@ -21,7 +21,6 @@ RUN rustup default nightly
 RUN apt-get update
 RUN apt-get install libpq-dev -y
 RUN cargo install diesel_cli --no-default-features --features postgres
-RUN cargo build
 
 COPY entrypoint.sh /
 RUN chmod +x /entrypoint.sh
