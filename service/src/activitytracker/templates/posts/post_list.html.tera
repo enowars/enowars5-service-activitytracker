@@ -10,7 +10,7 @@
     {% for post_and_user in data %}
         {% if post_and_user.1 %}
             <div class="col-6">
-                <div class="card mb-4">
+                <div class="card mb-4 bg-secondary  text-white">
                     <div class="card-header">
                         <h3 class="my-2">
                             Posts by {{ post_and_user.0.email }}
@@ -35,8 +35,10 @@
                         <div class="card-header">
                             <h3 class="my-2">
                                 Post
-                                <a class="btn btn-sm btn-secondary float-right ml-2" href="/posts/update/{{post.id}}">Edit</a>
-                                <a class="btn btn-sm btn-danger float-right" href="/posts/delete/{{post.id}}">Delete</a>
+                                {% if post_and_user.0.email == user %}
+                                    <a class="btn btn-sm btn-secondary float-right ml-2" href="/posts/update/{{ post_and_user.0.email }}/{{post.id}}">Edit</a>
+                                    <a class="btn btn-sm btn-danger float-right" href="/posts/delete/{{ post_and_user.0.email }}/{{post.id}}">Delete</a>
+                                {% endif %}
                                 <span class="btn float-right mr-2">This post is {{ post.visibility }}</span>
                             </h3>
                         </div>

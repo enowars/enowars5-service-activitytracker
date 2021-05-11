@@ -19,7 +19,13 @@ use serde_json::json;
 
 #[get("/posts")]
 pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>) -> Template {
-    let uap = UsersAndPosts::load_all(&crate::establish_connection());
+    let uap = UsersAndPosts::load_all(
+        match user {
+            Some(ref u) => u.id(),
+            None => -1,
+        },
+        &crate::establish_connection()
+    );
 
     Template::render("posts/post_list", json!({
             "data": uap,
@@ -113,11 +119,16 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
 }
 
 
-#[get("/posts/update/<id>")]
-pub fn update(user: User, flash: Option<FlashMessage>, id: i32) -> Template {
+#[get("/posts/update/<email>/<id>")]
+pub fn update(user: User, flash: Option<FlashMessage>, email: String, id: i32) -> Template {
+    let email_id: i32 = users::table
+        .select(users::id)
+        .filter(users::email.eq(email))
+        .first(&crate::establish_connection()).expect("No such user!");
     let post_data = posts::table
         .select(posts::all_columns)
         .filter(posts::id.eq(id))
+        .filter(posts::user_id.eq(email_id))
         .load::<Post>(&crate::establish_connection());
 
     let (post, err) = match post_data {
@@ -202,8 +213,16 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
     }
 }
 
-#[get("/posts/delete/<id>")]
-pub fn delete(user: User, id: i32) -> Flash<Redirect> {
+#[get("/posts/delete/<email>/<id>")]
+pub fn delete(user: User, email: String, id: i32) -> Flash<Redirect> {
+    let email_id: i32 = users::table
+        .select(users::id)
+        .filter(users::email.eq(email))
+        .first(&crate::establish_connection()).expect("No such user!");
+    let post: Post = posts::table
+        .filter(posts::user_id.eq(email_id))
+        .filter(posts::id.eq(id))
+        .first(&crate::establish_connection()).expect("No such post!");
     delete_post(
         &crate::establish_connection(),
         id

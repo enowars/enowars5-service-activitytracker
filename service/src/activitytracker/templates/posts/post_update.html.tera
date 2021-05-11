@@ -2,7 +2,7 @@
 
 {% block title %} Posts {% endblock %}
 
-{% block heading %} Update Post! {% endblock %}
+{% block heading %} Update! {% endblock %}
 
 {% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Get me out of here!</a> {% endblock %}
 
