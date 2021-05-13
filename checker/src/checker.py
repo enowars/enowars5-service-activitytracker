@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import html
+
 from enochecker import BaseChecker, BrokenServiceException, EnoException, run
 from enochecker.utils import SimpleSocket, assert_equals, assert_in
 import random
@@ -28,8 +30,8 @@ class ActivitytrackerChecker(BaseChecker):
 
     ##### EDIT YOUR CHECKER PARAMETERS
     flag_variants = 1
-    noise_variants = 1
-    havoc_variants = 3
+    noise_variants = 2
+    havoc_variants = 1
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
     ##### END CHECKER PARAMETERS
@@ -161,9 +163,10 @@ class ActivitytrackerChecker(BaseChecker):
 
             # Let´s obtain our note.
             resp = self.http_get('/posts')
+            self.debug(self.flag)
             self.debug(resp.text)
             assert_in(
-                self.flag, resp.text, "Resulting flag was found to be incorrect"
+                self.flag, html.unescape(resp.text), "Resulting flag was found to be incorrect"
             )
         else:
             raise EnoException("Wrong variant_id provided")
@@ -180,54 +183,30 @@ class ActivitytrackerChecker(BaseChecker):
                 if nothing is returned, the service status is considered okay.
                 the preferred way to report errors in the service is by raising an appropriate enoexception
         """
-        if self.variant_id == 0:
-            self.debug(f"Connecting to the service")
-            conn = self.connect()
-            welcome = conn.read_until(">")
+        if self.variant_id == 0 or self.variant_id == 1:
+            # A public or private post
+            firstname, lastname = barnum.create_name()
+            password = barnum.create_pw(length=10)
+            email = barnum.create_email(name=(firstname, lastname))
+            text = barnum.create_sentence(20, 40)
 
-            # First we need to register a user. So let's create some random strings. (Your real checker should use some better usernames or so [i.e., use the "faker¨ lib])
-            username = "".join(
-                random.choices(string.ascii_uppercase + string.digits, k=12)
-            )
-            password = "".join(
-                random.choices(string.ascii_uppercase + string.digits, k=12)
-            )
-            randomNote = "".join(
-                random.choices(string.ascii_uppercase + string.digits, k=36)
-            )
+            self.register_user(email, password)
 
-            # Register another user
-            self.register_user(conn, username, password)
-
-            # Now we need to login
-            self.login_user(conn, username, password)
-
-            # Finally, we can post our note!
-            self.debug(f"Sending command to save a note")
-            conn.write(f"set {randomNote}\n")
-            conn.read_until(b"Note saved! ID is ")
-
-            try:
-                noteId = conn.read_until(b"!\n>").rstrip(b"!\n>").decode()
-            except Exception as ex:
-                self.debug(f"Failed to retrieve note: {ex}")
-                raise BrokenServiceException("Could not retrieve NoteId")
-
-            assert_equals(len(noteId) > 0, True, message="Empty noteId received")
-
-            self.debug(f"{noteId}")
-
-            # Exit!
-            self.debug(f"Sending exit command")
-            conn.write(f"exit\n")
-            conn.close()
+            self.http_get('/posts')
+            self.http_get('/posts/new')
+            self.http_post('/posts/insert', files={
+                "body": text,
+                "visibility": "public" if self.variant_id == 0 else "private"
+            })
+            self.http_get('/posts')
 
             self.chain_db = {
-                "username": username,
+                "username": email,
                 "password": password,
-                "noteId": noteId,
-                "note": randomNote,
+                "text": text
             }
+
+
         else:
             raise EnoException("Wrong variant_id provided")
 
@@ -244,35 +223,43 @@ class ActivitytrackerChecker(BaseChecker):
                 the preferred way to report errors in the service is by raising an appropriate enoexception
         """
         if self.variant_id == 0:
+            # public post
+            try:
+                username: str = self.chain_db["username"]
+                text: str = self.chain_db["text"]
+            except IndexError as ex:
+                self.debug(f"error getting notes from db: {ex}")
+                raise BrokenServiceException("Previous putflag failed.")
+
+            # Let´s obtain our note.
+            resp = self.http_get('/posts')
+            assert_in(
+                text, html.unescape(resp.text), "Resulting flag was found to be incorrect"
+            )
+            assert_in(
+                username, html.unescape(resp.text), "Resulting flag was found to be incorrect"
+            )
+        elif self.variant_id == 1:
+            # private post
             try:
                 username: str = self.chain_db["username"]
                 password: str = self.chain_db["password"]
-                noteId: str = self.chain_db["noteId"]
-                randomNote: str = self.chain_db["note"]
-            except Exception as ex:
-                self.debug("Failed to read db {ex}")
-                raise BrokenServiceException("Previous putnoise failed.")
+                text: str = self.chain_db["text"]
+            except IndexError as ex:
+                self.debug(f"error getting notes from db: {ex}")
+                raise BrokenServiceException("Previous putflag failed.")
 
-            self.debug(f"Connecting to service")
-            conn = self.connect()
-            welcome = conn.read_until(">")
-
-            # Let's login to the service
-            self.login_user(conn, username, password)
+            self.debug(f"Connecting to the service")
+            self.login_user(username, password)
 
             # Let´s obtain our note.
-            self.debug(f"Sending command to retrieve note: {noteId}")
-            conn.write(f"get {noteId}\n")
-            conn.readline_expect(
-                randomNote.encode(),
-                read_until=b">",
-                exception_message="Resulting flag was found to be incorrect"
+            resp = self.http_get('/posts')
+            assert_in(
+                text, html.unescape(resp.text), "Resulting flag was found to be incorrect"
             )
-
-            # Exit!
-            self.debug(f"Sending exit command")
-            conn.write(f"exit\n")
-            conn.close()
+            assert_in(
+                username, html.unescape(resp.text), "Resulting flag was found to be incorrect"
+            )
         else:
             raise EnoException("Wrong variant_id provided")
 
@@ -285,98 +272,33 @@ class ActivitytrackerChecker(BaseChecker):
                 If nothing is returned, the service status is considered okay.
                 The preferred way to report Errors in the service is by raising an appropriate EnoException
         """
-        self.debug(f"Connecting to service")
-        conn = self.connect()
-        welcome = conn.read_until(">")
 
         if self.variant_id == 0:
-            # In variant 1, we'll check if the help text is available
-            self.debug(f"Sending help command")
-            conn.write(f"help\n")
-            is_ok = conn.read_until(">")
+            # Check edit functionality
+            firstname, lastname = barnum.create_name()
+            password = barnum.create_pw(length=10)
+            email = barnum.create_email(name=(firstname, lastname))
+            text = barnum.create_sentence(20, 40)
 
-            for line in [
-                "This is a notebook service. Commands:",
-                "reg USER PW - Register new account",
-                "log USER PW - Login to account",
-                "set TEXT..... - Set a note",
-                "user  - List all users",
-                "list - List all notes",
-                "exit - Exit!",
-                "dump - Dump the database",
-                "get ID",
-            ]:
-                assert_in(line.encode(), is_ok, "Received incomplete response.")
+            self.register_user(email, password)
 
-        elif self.variant_id == 1:
-            # In variant 2, we'll check if the `user` command still works.
-            username = "".join(
-                random.choices(string.ascii_uppercase + string.digits, k=12)
-            )
-            password = "".join(
-                random.choices(string.ascii_uppercase + string.digits, k=12)
-            )
+            self.http_get('/posts')
+            self.http_get('/posts/new')
+            self.http_post('/posts/insert', files={
+                "body": text,
+                "visibility": "public" if self.variant_id == 0 else "private"
+            })
+            resp = self.http_get('/posts')
+            t = resp.text.split("\">Edit</a>")[0]
+            url = t.split("href=\"")[-1]
 
-            # Register and login a dummy user
-            self.register_user(conn, username, password)
-            self.login_user(conn, username, password)
-
-            self.debug(f"Sending user command")
-            conn.write(f"user\n")
-            ret = conn.readline_expect(
-                "User 0: ",
-                read_until=b">",
-                exception_message="User command does not return any users",
-            )
-
-            if username:
-                assert_in(username.encode(), ret, "Flag username not in user output")
-
-        elif self.variant_id == 2:
-            # In variant 2, we'll check if the `list` command still works.
-            username = "".join(
-                random.choices(string.ascii_uppercase + string.digits, k=12)
-            )
-            password = "".join(
-                random.choices(string.ascii_uppercase + string.digits, k=12)
-            )
-            randomNote = "".join(
-                random.choices(string.ascii_uppercase + string.digits, k=36)
-            )
-
-            # Register and login a dummy user
-            self.register_user(conn, username, password)
-            self.login_user(conn, username, password)
-
-            self.debug(f"Sending command to save a note")
-            conn.write(f"set {randomNote}\n")
-            conn.read_until(b"Note saved! ID is ")
-
-            try:
-                noteId = conn.read_until(b"!\n>").rstrip(b"!\n>").decode()
-            except Exception as ex:
-                self.debug(f"Failed to retrieve note: {ex}")
-                raise BrokenServiceException("Could not retrieve NoteId")
-
-            assert_equals(len(noteId) > 0, True, message="Empty noteId received")
-
-            self.debug(f"{noteId}")
-
-            self.debug(f"Sending list command")
-            conn.write(f"list\n")
-            conn.readline_expect(
-                noteId.encode(),
-                read_until=b'>',
-                exception_message="List command does not work as intended"
-            )
-
+            resp = self.http_get(url)
+            self.debug(text)
+            self.debug(html.unescape(resp.text))
+            assert_in(text, html.unescape(resp.text))
         else:
             raise EnoException("Wrong variant_id provided")
 
-        # Exit!
-        self.debug(f"Sending exit command")
-        conn.write(f"exit\n")
-        conn.close()
 
     def exploit(self):
         """
