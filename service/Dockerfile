@@ -24,12 +24,12 @@ COPY entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 
 RUN cargo init
-COPY Cargo.* ./
+COPY ./src/activitytracker/Cargo.* ./
 RUN cargo build --release
 
 # Copy our service
-COPY src/activitytracker/ /service/
-RUN touch //service/main.rs
+COPY ./src/activitytracker/ /service/
+RUN touch /service/src/main.rs
 
 #RUN diesel setup
 #RUN diesel migration run
