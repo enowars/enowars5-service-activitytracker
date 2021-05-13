@@ -1,8 +1,8 @@
 {% extends "base" %}
 
-{% block title %} Posts {% endblock %}
+{% block title %} Activities {% endblock %}
 
-{% block heading %} New Post! {% endblock %}
+{% block heading %} Log New Activity! {% endblock %}
 
 {% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Get me out of here!</a> {% endblock %}
 
@@ -11,7 +11,7 @@
         <div class="col">
             <hr>
             <div class="form-group">
-                <label for="body">Post body:<span style="color: red">*</span></label>
+                <label for="body">Activity body:<span style="color: red">*</span></label>
                 <textarea required placeholder="Hello world!" name="body"
                           id="body" class="form-control"> </textarea>
 

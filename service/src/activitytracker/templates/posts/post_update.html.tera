@@ -1,6 +1,6 @@
 {% extends "base" %}
 
-{% block title %} Posts {% endblock %}
+{% block title %} Activities {% endblock %}
 
 {% block heading %} Update! {% endblock %}
 
@@ -14,7 +14,7 @@
             <div class="form-group">
                 <div class="row">
                     <div class="col">
-                        <label for="body">Post body:<span style="color: red">*</span></label>
+                        <label for="body">Activity body:<span style="color: red">*</span></label>
                         <textarea required placeholder="Hello world!" name="body"
                                   id="body" class="form-control"> {{ post[0].body }} </textarea>
                     </div>

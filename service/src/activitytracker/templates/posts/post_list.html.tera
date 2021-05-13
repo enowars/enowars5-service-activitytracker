@@ -1,10 +1,10 @@
 {% extends "base" %}
 
-{% block title %} Posts {% endblock %}
+{% block title %} Activities {% endblock %}
 
-{% block heading %} Posts! {% endblock %}
+{% block heading %} Activities! {% endblock %}
 
-{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts/new">Write a new post!</a> {% endblock %}
+{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts/new">Log an activity!</a> {% endblock %}
 
 {% block content %}
     {% for post_and_user in data %}
@@ -13,7 +13,7 @@
                 <div class="card mb-4 bg-secondary  text-white">
                     <div class="card-header">
                         <h3 class="my-2">
-                            Posts by {{ post_and_user.0.email }}
+                            Activities by {{ post_and_user.0.email }}
                         </h3>
                     </div>
                     <div class="card-body">
@@ -23,7 +23,7 @@
                             You are not friends.
                         {% endif %}
                         <br>
-                        This user has {{ post_and_user.1 | length }} posts in total.
+                        This user has {{ post_and_user.1 | length }} activities in total.
                     </div>
                 </div>
             </div>
@@ -34,12 +34,12 @@
                     <div class="card mb-4">
                         <div class="card-header">
                             <h3 class="my-2">
-                                Post
+                                Activity
                                 {% if post_and_user.0.email == user %}
                                     <a class="btn btn-sm btn-secondary float-right ml-2" href="/posts/update/{{ post_and_user.0.email }}/{{post.id}}">Edit</a>
                                     <a class="btn btn-sm btn-danger float-right" href="/posts/delete/{{ post_and_user.0.email }}/{{post.id}}">Delete</a>
                                 {% endif %}
-                                <span class="btn float-right mr-2">This post is {{ post.visibility }}</span>
+                                <span class="btn float-right mr-2">This activity is {{ post.visibility }}</span>
                             </h3>
                         </div>
                         <div class="card-body">

@@ -31,7 +31,7 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>) -> Template {
             "data": uap,
             "flash": match flash {
                 Some(ref msg) => msg.msg(),
-                None => "List of posts"
+                None => "List of activities"
             },
             "user": match user {
                 Some(u) => u.email().to_string(),
@@ -44,7 +44,7 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>) -> Template {
 pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
     let (m_name, m_msg) = match flash {
         Some(ref msg) => (msg.name(), msg.msg()),
-        None => ("success", "Create a new post")
+        None => ("success", "Create a new activity")
     };
     Template::render("posts/post_new", json!({
             "flash": if m_name == "success" {m_msg} else {""},
@@ -82,7 +82,7 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
                     let absolute_path: String = format!("imgs/{}", _file_name.clone().unwrap());
                     fs::copy(_path, &absolute_path).unwrap();
 
-                    Some(format!("imgs/{}", _file_name.clone().unwrap()))
+                    Some(format!("imgs/{}", _file_name.clone().unwrap()))   // TODO: Potential Vulnerability - directory traversal?
                 }
                 None => None,
             };
@@ -102,7 +102,7 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
 
             Flash::success(
                 Redirect::to("/posts"),
-                "Success! You created a new post!",
+                "Success! You created a new activity!",
             )
         },
         Err(err_msg) => {
@@ -121,6 +121,7 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
 
 #[get("/posts/update/<email>/<id>")]
 pub fn update(user: User, flash: Option<FlashMessage>, email: String, id: i32) -> Template {
+    /* checks whether the user has rights to edit the post */
     let email_id: i32 = users::table
         .select(users::id)
         .filter(users::email.eq(email))
@@ -141,7 +142,7 @@ pub fn update(user: User, flash: Option<FlashMessage>, email: String, id: i32) -
             "err": err,
             "flash": match flash {
                 Some(ref msg) => msg.msg(),
-                None => "Create a new post"
+                None => "Create a new activity"
              },
             "user": user.email().to_string()
         }))
@@ -197,7 +198,7 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
             );
             Flash::success(
                 Redirect::to("/posts"),
-                "Success! Post updated!",
+                "Success! Activity updated!",
             )
         }
         Err(err_msg) => {
@@ -222,10 +223,10 @@ pub fn delete(user: User, email: String, id: i32) -> Flash<Redirect> {
     let post: Post = posts::table
         .filter(posts::user_id.eq(email_id))
         .filter(posts::id.eq(id))
-        .first(&crate::establish_connection()).expect("No such post!");
+        .first(&crate::establish_connection()).expect("No such activity!");
     delete_post(
         &crate::establish_connection(),
         id
     );
-    Flash::success(Redirect::to("/posts"), "The post was deleted.")
+    Flash::success(Redirect::to("/posts"), "The activity was deleted.")
 }
