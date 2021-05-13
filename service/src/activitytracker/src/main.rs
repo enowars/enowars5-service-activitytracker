@@ -51,7 +51,7 @@ fn index() -> Redirect {
 /* Static files Handler */
 #[get("/imgs/<file..>")]
 fn assets(file: PathBuf) -> Option<NamedFile> {
-    NamedFile::open(Path::new("imgs/").join(file)).ok()
+    NamedFile::open(Path::new(env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str()).join(file)).ok()
 }
 
 fn main() {

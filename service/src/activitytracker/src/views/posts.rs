@@ -15,6 +15,7 @@ use rocket_multipart_form_data::{
 };
 use rocket_auth::User;
 use serde_json::json;
+use std::env;
 
 
 #[get("/posts")]
@@ -79,7 +80,7 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
 
                     let format: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
 
-                    let absolute_path: String = format!("imgs/{}", _file_name.clone().unwrap());
+                    let absolute_path: String = format!("{}{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), _file_name.clone().unwrap());
                     fs::copy(_path, &absolute_path).unwrap();
 
                     Some(format!("imgs/{}", _file_name.clone().unwrap()))   // TODO: Potential Vulnerability - directory traversal?
@@ -173,7 +174,7 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
 
                     let format: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
 
-                    let absolute_path: String = format!("imgs/{}", _file_name.clone().unwrap());
+                    let absolute_path: String = format!("{}{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), _file_name.clone().unwrap());
                     fs::copy(_path, &absolute_path).unwrap();
 
                     Some(format!("imgs/{}", _file_name.clone().unwrap()))

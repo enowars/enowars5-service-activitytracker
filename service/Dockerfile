@@ -4,9 +4,6 @@ FROM rustlang/rust:nightly-buster
 # Create our mapped data volume endpoint
 RUN mkdir /data/
 
-# Copy our service
-COPY src/activitytracker/ /service/
-
 # Change the working directory.
 WORKDIR /service/
 # Expose the service's port
@@ -20,11 +17,26 @@ RUN rustup default nightly
 #RUN cargo install diesel_cli --no-default-features --features postgres
 RUN apt-get update
 RUN apt-get install libpq-dev -y
+RUN apt-get install netcat -y
 RUN cargo install diesel_cli --no-default-features --features postgres
 
 COPY entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 
+RUN cargo init
+COPY Cargo.* ./
+RUN cargo build --release
+
+# Copy our service
+COPY src/activitytracker/ /service/
+RUN touch //service/main.rs
+
+#RUN diesel setup
+#RUN diesel migration run
+
+RUN cargo build --release
+
 # Run the service
 #ENTRYPOINT ["cargo", "run"]
+#ENTRYPOINT ["cargo", "run", "--release"]
 ENTRYPOINT ["/entrypoint.sh"]
