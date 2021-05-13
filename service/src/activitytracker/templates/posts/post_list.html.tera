@@ -1,0 +1,59 @@
+{% extends "base" %}
+
+{% block title %} Activities {% endblock %}
+
+{% block heading %} Activities! {% endblock %}
+
+{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts/new">Log an activity!</a> {% endblock %}
+
+{% block content %}
+    {% for post_and_user in data %}
+        {% if post_and_user.1 %}
+            <div class="col-6">
+                <div class="card mb-4 bg-secondary  text-white">
+                    <div class="card-header">
+                        <h3 class="my-2">
+                            Activities by {{ post_and_user.0.email }}
+                        </h3>
+                    </div>
+                    <div class="card-body">
+                        {% if post_and_user.0.email == user %}
+                            This is you.
+                        {% else %}
+                            You are not friends.
+                        {% endif %}
+                        <br>
+                        This user has {{ post_and_user.1 | length }} activities in total.
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+        {% for post in post_and_user.1 %}
+            {% if post.visibility == "public" or post_and_user.0.email == user %}
+                <div class="col-6">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h3 class="my-2">
+                                Activity
+                                {% if post_and_user.0.email == user %}
+                                    <a class="btn btn-sm btn-secondary float-right ml-2" href="/posts/update/{{ post_and_user.0.email }}/{{post.id}}">Edit</a>
+                                    <a class="btn btn-sm btn-danger float-right" href="/posts/delete/{{ post_and_user.0.email }}/{{post.id}}">Delete</a>
+                                {% endif %}
+                                <span class="btn float-right mr-2">This activity is {{ post.visibility }}</span>
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            {{post.body}}
+                            {% if post.image %}
+                                <img class="img-fluid float-right" src="{{post.image}}" alt="an image of the post" style="width: 200px">
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+        {% if post_and_user.1 and post_and_user.1 | length % 2 == 0 %}
+            <div class="col-6"></div>
+        {% endif %}
+    {% endfor %}
+{% endblock %}

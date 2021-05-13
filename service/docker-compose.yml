@@ -1,11 +1,43 @@
 version: '3'
 services:
+  postgres:
+    image: postgres
+    hostname: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: diesel
+      POSTGRES_PASSWORD: diesel
+      POSTGRES_DB: diesel
+      PGDATA: /data/postgres
+    volumes:
+      - ./data/:/data:rw
+    ports:
+      - 5469:5432 # TODO remove this!
+
+  pgadmin:
+    image: dpage/pgadmin4
+    depends_on:
+      - postgres
+    ports:
+      - 5555:80 # TODO remove this!
+    environment:
+      PGADMIN_DEFAULT_EMAIL: richard@enoflag.de
+      PGADMIN_DEFAULT_PASSWORD: enoflag
+    restart: unless-stopped
+
   activitytracker:
     build: .
+    depends_on:
+      - postgres
     # The code should be copied into the container using COPY.
     # Mount the data folder writable, so that information can be persisted across restarts.
     volumes:
       - ./data/:/data:rw
+    environment:
+      DATA_DIR: /data/imgs/
     # Define the port mapping (external:internal port)
     ports:
-      - "4242:8000"
+      - 4242:8000
+
+volumes:
+  postgres-data:
