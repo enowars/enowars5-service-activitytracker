@@ -3,6 +3,7 @@ from enochecker import BaseChecker, BrokenServiceException, EnoException, run
 from enochecker.utils import SimpleSocket, assert_equals, assert_in
 import random
 import string
+import barnum
 
 #### Checker Tenets
 # A checker SHOULD not be easily identified by the examination of network traffic => This one is not satisfied, because our usernames and notes are simple too random and easily identifiable.
@@ -10,7 +11,7 @@ import string
 ####
 
 
-class N0t3b00kChecker(BaseChecker):
+class ActivitytrackerChecker(BaseChecker):
     """
     Change the methods given here, then simply create the class and .run() it.
     Magic.
@@ -33,25 +34,54 @@ class N0t3b00kChecker(BaseChecker):
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
     ##### END CHECKER PARAMETERS
 
-    def register_user(self, conn: SimpleSocket, username: str, password: str):
+    def register_user(self, email: str, password: str):
         self.debug(
-            f"Sending command to register user: {username} with password: {password}"
+            f"Sending command to register user: {email} with password: {password}"
         )
-        conn.write(f"reg {username} {password}\n")
-        conn.readline_expect(
-            b"User successfully registered",
-            read_until=b">",
-            exception_message="Failed to register user",
+        self.http_get("/auth/signup")
+        resp = self.http_post("/auth/signup",
+                              data={
+                                  "email": email,
+                                  "password": password
+                              })
+        if resp.status_code != 303:
+            self.debug(resp)
+            raise EnoException(f"Unexpected status code while registering user: {resp.status_code}")
+
+    def login_user(self, email: str, password: str):
+        self.debug(
+            f"Sending command to login user: {email} with password: {password}"
+        )
+        self.http_get("/auth/login")
+        resp = self.http_post("/auth/login",
+                              data={
+                                  "email": email,
+                                  "password": password
+                              })
+        if resp.status_code != 303:
+            self.debug(resp)
+            raise EnoException(f"Unexpected status code while registering user: {resp.status_code}")
+
+
+    def generate_matching_emails(self, person1, person2, company):
+        tld = barnum.create_email().split(".")[-1]
+        domain = f"{company.lower().replace(' ', '')}.{tld}"
+        email_patterns = [
+            lambda x: f"{x[0][0]}.{x[1]}",
+            lambda x: f"{x[0]}.{x[1]}",
+            lambda x: f"{x[0]}{x[1]}",
+            lambda x: f"{x[0][0]}{x[1]}",
+            lambda x: f"{x[1]}",
+            lambda x: f"{x[0]}",
+            lambda x: f"{x[0]}{x[1][0]}",
+        ]
+        pattern = random.choice(email_patterns)
+        return (
+            f"{pattern(person1)}@{domain}",
+            f"{pattern(person2)}@{domain}",
         )
 
-    def login_user(self, conn: SimpleSocket, username: str, password: str):
-        self.debug(f"Sending command to login.")
-        conn.write(f"log {username} {password}\n")
-        conn.readline_expect(
-            b"Successfully logged in!",
-            read_until=b">",
-            exception_message="Failed to log in",
-        )
+
 
     def putflag(self):  # type: () -> None
         """
@@ -66,52 +96,42 @@ class N0t3b00kChecker(BaseChecker):
         """
         if self.variant_id == 0:
             # First we need to register a user. So let's create some random strings. (Your real checker should use some funny usernames or so)
-            username: str = "".join(
-                random.choices(string.ascii_uppercase + string.digits, k=12)
-            )
-            password: str = "".join(
-                random.choices(string.ascii_uppercase + string.digits, k=12)
-            )
+            firstname, lastname = barnum.create_name()
+            company = barnum.create_company_name()
+            jobtitle = barnum.create_job_title()
+            password = barnum.create_pw(length=10)
 
-            # Log a message before any critical action that could raise an error.
-            self.debug(f"Connecting to service")
-            # Create a TCP connection to the service.
-            conn = self.connect()
-            welcome = conn.read_until(">")
+            boss_firstname, boss_lastname = barnum.create_name()
+            boss_password = barnum.create_pw(length=10)
 
-            # Register a new user
-            self.register_user(conn, username, password)
+            email, boss_email = self.generate_matching_emails((firstname.lower(), lastname.lower()),
+                                                              (boss_firstname.lower(), boss_lastname.lower()),
+                                                              company)
 
-            # Now we need to login
-            self.login_user(conn, username, password)
 
-            # Finally, we can post our note!
-            self.debug(f"Sending command to set the flag")
-            conn.write(f"set {self.flag}\n")
-            conn.read_until(b"Note saved! ID is ")
+            self.register_user(email, password)
 
-            try:
-                # Try to retrieve the resulting noteId. Using rstrip() is hacky, you should probably want to use regular expressions or something more robust.
-                noteId = conn.read_until(b"!\n>").rstrip(b"!\n>").decode()
-            except Exception as ex:
-                self.debug(f"Failed to retrieve note: {ex}")
-                raise BrokenServiceException("Could not retrieve NoteId")
+            self.http_get('/posts')
+            self.http_get('/posts/new')
+            self.http_post('/posts/insert', files={
+                "body": f"I love working here at {company} as a {jobtitle}. My boss {boss_firstname} {boss_lastname} is great, and I'll get a promotion soon! Come work here as well! Cheers, {firstname} {lastname}",
+                "visibility": "public"
+            })
+            self.http_get('/posts')
 
-            assert_equals(len(noteId) > 0, True, message="Empty noteId received")
 
-            self.debug(f"Got noteId {noteId}")
-
-            # Exit!
-            self.debug(f"Sending exit command")
-            conn.write(f"exit\n")
-            conn.close()
+            self.http_get('/auth/logout')
+            self.register_user(boss_email, boss_password)
+            self.http_get('/posts/new')
+            self.http_post('/posts/insert', files={
+                "body": self.flag,
+                "visibility": "private"
+            })
 
             # Save the generated values for the associated getflag() call.
-            # This is not a real dictionary! You cannot update it (i.e., self.chain_db["foo"] = bar) and some types are converted (i.e., bool -> str.). See: https://github.com/enowars/enochecker/issues/27
             self.chain_db = {
-                "username": username,
-                "password": password,
-                "noteId": noteId,
+                "username": boss_email,
+                "password": boss_password,
             }
 
         else:
@@ -132,30 +152,19 @@ class N0t3b00kChecker(BaseChecker):
             try:
                 username: str = self.chain_db["username"]
                 password: str = self.chain_db["password"]
-                noteId: str = self.chain_db["noteId"]
             except IndexError as ex:
                 self.debug(f"error getting notes from db: {ex}")
                 raise BrokenServiceException("Previous putflag failed.")
 
             self.debug(f"Connecting to the service")
-            conn = self.connect()
-            welcome = conn.read_until(">")
-
-            # Let's login to the service
-            self.login_user(conn, username, password)
+            self.login_user(username, password)
 
             # Let´s obtain our note.
-            self.debug(f"Sending command to retrieve note: {noteId}")
-            conn.write(f"get {noteId}\n")
-            note = conn.read_until(">")
+            resp = self.http_get('/posts')
+            self.debug(resp.text)
             assert_in(
-                self.flag.encode(), note, "Resulting flag was found to be incorrect"
+                self.flag, resp.text, "Resulting flag was found to be incorrect"
             )
-
-            # Exit!
-            self.debug(f"Sending exit command")
-            conn.write(f"exit\n")
-            conn.close()
         else:
             raise EnoException("Wrong variant_id provided")
 
@@ -382,6 +391,6 @@ class N0t3b00kChecker(BaseChecker):
         pass
 
 
-app = N0t3b00kChecker.service  # This can be used for uswgi.
+app = ActivitytrackerChecker.service  # This can be used for uswgi.
 if __name__ == "__main__":
-    run(N0t3b00kChecker)
+    run(ActivitytrackerChecker)
