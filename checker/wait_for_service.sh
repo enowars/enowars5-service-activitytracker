@@ -1,4 +1,4 @@
-until nc -vz -w 100 postgres 5432
+until nc -vz -w 100 localhost 5469
 do
   sleep 1
 done

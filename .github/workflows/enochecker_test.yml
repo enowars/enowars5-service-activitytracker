@@ -41,6 +41,7 @@ jobs:
           echo "ENOCHECKER_TEST_SERVICE_ADDRESS=$(ip -4 address show dev eth0 | grep inet | awk '{ print $2 }' | sed 's|/.*$||')" >> $GITHUB_ENV
       - name: wait for service
         run: |
+          cd checker
           bash wait_for_service.sh
       - name: run enochecker_test
         run: |
