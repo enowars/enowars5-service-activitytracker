@@ -6,6 +6,7 @@ from enochecker.utils import SimpleSocket, assert_equals, assert_in
 import random
 import string
 import barnum
+import os
 
 #### Checker Tenets
 # A checker SHOULD not be easily identified by the examination of network traffic => This one is not satisfied, because our usernames and notes are simple too random and easily identifiable.
@@ -31,7 +32,7 @@ class ActivitytrackerChecker(BaseChecker):
     ##### EDIT YOUR CHECKER PARAMETERS
     flag_variants = 1
     noise_variants = 2
-    havoc_variants = 1
+    havoc_variants = 2
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
     ##### END CHECKER PARAMETERS
@@ -114,11 +115,16 @@ class ActivitytrackerChecker(BaseChecker):
             self.register_user(email, password)
 
             self.http_get('/posts')
+
+            self.generate_random_posts(random.randint(0, 10), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password, "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
+
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": f"I love working here at {company} as a {jobtitle}. My boss {boss_firstname} {boss_lastname} is great, and I'll get a promotion soon! Come work here as well! Cheers, {firstname} {lastname}",
                 "visibility": "public"
             })
+
+            self.generate_random_posts(random.randint(0, 10), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password, "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
             self.http_get('/posts')
 
 
@@ -172,6 +178,41 @@ class ActivitytrackerChecker(BaseChecker):
             raise EnoException("Wrong variant_id provided")
 
 
+    def generate_random_posts(self, n=1, templates="any", data=None, private=2):
+        """
+        Creates n posts using the defined templates. private=0: public, 1: private, 2: random
+
+        User should already be logged in.
+        """
+        posts = []
+        directory = r"/checker/post_templates/"
+        for filename in os.listdir(directory):
+            if filename.endswith(".template"):
+                f = os.path.join(directory, filename)
+                if templates == "any" or templates in f:
+                    with open(f) as template:
+                        posts.extend(list(map(lambda x: x.strip(), template.readlines())))
+            else:
+                continue
+        self.debug(posts)
+
+        if not posts:
+            raise EnoException("No matching template found.")
+
+        for i in range(n):
+            p = random.random() > 0.5
+            if private == 1:
+                p = False
+            elif private == 0:
+                p = True
+            self.http_get('/posts/new')
+            self.debug("HERE")
+            self.http_post('/posts/insert', files={
+                "body": random.choice(posts).format(**data) if data else random.choice(posts),
+                "visibility": "public" if p else "private"
+            })
+
+
     def putnoise(self):  # type: () -> None
         """
         This method stores noise in the service. The noise should later be recoverable.
@@ -187,17 +228,21 @@ class ActivitytrackerChecker(BaseChecker):
             # A public or private post
             firstname, lastname = barnum.create_name()
             password = barnum.create_pw(length=10)
-            email = barnum.create_email(name=(firstname, lastname))
+            email = barnum.create_email(name=(firstname, lastname)).lower()
+            company = barnum.create_company_name()
+            jobtitle = barnum.create_job_title()
             text = barnum.create_sentence(20, 40)
 
             self.register_user(email, password)
 
+            self.generate_random_posts(n=random.randint(0, 10), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password}, templates="simple")
             self.http_get('/posts')
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": text,
                 "visibility": "public" if self.variant_id == 0 else "private"
             })
+            self.generate_random_posts(n=random.randint(0, 10), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password}, templates="simple")
             self.http_get('/posts')
 
             self.chain_db = {
@@ -293,9 +338,35 @@ class ActivitytrackerChecker(BaseChecker):
             url = t.split("href=\"")[-1]
 
             resp = self.http_get(url)
-            self.debug(text)
-            self.debug(html.unescape(resp.text))
             assert_in(text, html.unescape(resp.text))
+        elif self.variant_id == 1:
+            # check delete functionality
+            firstname, lastname = barnum.create_name()
+            password = barnum.create_pw(length=10)
+            email = barnum.create_email(name=(firstname, lastname))
+
+            self.register_user(email, password)
+
+            random_validation_text = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(64))
+
+            self.http_get('/posts')
+            self.http_get('/posts/new')
+            resp = self.http_post('/posts/insert', files={
+                "body": random_validation_text,
+                "visibility": "public"
+            })
+            resp = self.http_get('/posts')
+            assert_in(random_validation_text, html.unescape(resp.text))
+            t = resp.text.split("\">Delete</a>")[0]
+            url = t.split("href=\"")[-1]
+            resp = self.http_get(url)
+            resp = self.http_get('/posts')
+            if random_validation_text in html.unescape(resp.text):
+                raise BrokenServiceException(
+                    "Received unexpected response.",
+                    internal_message=f"{random_validation_text} is in {html.unescape(resp.text)}",
+                )
+        # TODO: check file upload
         else:
             raise EnoException("Wrong variant_id provided")
 
