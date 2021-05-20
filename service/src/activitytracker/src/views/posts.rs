@@ -129,7 +129,7 @@ pub fn update(user: User, flash: Option<FlashMessage>, email: String, id: i32) -
         .first(&crate::establish_connection()).expect("No such user!");
     let post_data = posts::table
         .select(posts::all_columns)
-        .filter(posts::id.eq(id))
+        .filter(posts::user_post_count.eq(id))
         .filter(posts::user_id.eq(email_id))
         .load::<Post>(&crate::establish_connection());
 
@@ -223,11 +223,11 @@ pub fn delete(user: User, email: String, id: i32) -> Flash<Redirect> {
         .first(&crate::establish_connection()).expect("No such user!");
     let post: Post = posts::table
         .filter(posts::user_id.eq(email_id))
-        .filter(posts::id.eq(id))
+        .filter(posts::user_post_count.eq(id))
         .first(&crate::establish_connection()).expect("No such activity!");
     delete_post(
         &crate::establish_connection(),
-        id
+        post.id
     );
     Flash::success(Redirect::to("/posts"), "The activity was deleted.")
 }
