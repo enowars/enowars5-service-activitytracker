@@ -8,6 +8,8 @@ use crate::diesel::prelude::*;
 use serde::{Serialize};
 use crate::models::users::User;
 use rocket_auth::Users;
+use diesel::expression::dsl::count;
+use diesel::sql_types::Integer;
 
 
 #[derive(Queryable, Serialize, Associations, Identifiable)]
@@ -18,7 +20,8 @@ pub struct Post {
     pub deleted: bool,
     pub visibility: String,
     pub image: Option<String>,
-    pub user_id: i32
+    pub user_id: i32,
+    pub user_post_count: i32
 }
 
 #[derive(Insertable, AsChangeset)]
@@ -28,6 +31,7 @@ pub struct NewPost<'a> {
     pub visibility: &'a str,
     pub image: Option<String>,
     pub user_id: i32,
+    pub user_post_count: i32
 }
 
 #[derive(Serialize)]
@@ -50,8 +54,13 @@ impl UsersAndPosts {
 }
 
 pub fn create_post(conn: &PgConnection, body: &str, visibility: &str, image: Option<String>, user_id: i32) -> Post {
+    let user_post_count = (posts::table
+        .select(count(posts::id))
+        .filter(posts::user_id.eq(user_id))
+        .first::<i64>(&crate::establish_connection()).expect("Error saving post.") + 1) as i32; // Trust me, this is safe!
+
     let new_post = NewPost {
-        body, visibility, image, user_id
+        body, visibility, image, user_id, user_post_count
     };
 
     diesel::insert_into(posts::table)
