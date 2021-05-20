@@ -15,6 +15,7 @@ table! {
         visibility -> Text,
         image -> Nullable<Text>,
         user_id -> Int4,
+        user_post_count -> Int4,
     }
 }
 

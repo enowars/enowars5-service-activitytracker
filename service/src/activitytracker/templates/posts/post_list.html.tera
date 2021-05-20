@@ -36,8 +36,8 @@
                             <h3 class="my-2">
                                 Activity
                                 {% if post_and_user.0.email == user %}
-                                    <a class="btn btn-sm btn-secondary float-right ml-2" href="/posts/update/{{ post_and_user.0.email }}/{{post.id}}">Edit</a>
-                                    <a class="btn btn-sm btn-danger float-right" href="/posts/delete/{{ post_and_user.0.email }}/{{post.id}}">Delete</a>
+                                    <a class="btn btn-sm btn-secondary float-right ml-2" href="/posts/update/{{ post_and_user.0.email }}/{{post.user_post_count}}">Edit</a>
+                                    <a class="btn btn-sm btn-danger float-right" href="/posts/delete/{{ post_and_user.0.email }}/{{post.user_post_count}}">Delete</a>
                                 {% endif %}
                                 <span class="btn float-right mr-2">This activity is {{ post.visibility }}</span>
                             </h3>

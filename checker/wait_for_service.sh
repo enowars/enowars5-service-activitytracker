@@ -3,4 +3,4 @@ do
   sleep 1
 done
 
-sleep 30
+sleep 60
