@@ -7,9 +7,7 @@ use crate::diesel::prelude::*;
 
 use serde::{Serialize};
 use crate::models::users::User;
-use rocket_auth::Users;
 use diesel::expression::dsl::count;
-use diesel::sql_types::Integer;
 
 
 #[derive(Queryable, Serialize, Associations, Identifiable)]
@@ -43,7 +41,7 @@ impl From<(User, Vec<Post>)> for UsersAndPosts {
 }
 impl UsersAndPosts {
     pub fn load_all(email_id: i32, conn: &PgConnection) -> Vec<UsersAndPosts>{
-        let users = users::table.load::<User>(conn).expect("Error loading users");
+        let users: Vec<User> = users::table.load::<User>(conn).expect("Error loading users").into_iter().rev().collect();
         let posts = Post::belonging_to(&users)
             .filter(posts::deleted.eq(false))
             .filter(posts::visibility.eq("public").or(posts::user_id.eq(email_id)))

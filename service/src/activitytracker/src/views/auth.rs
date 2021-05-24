@@ -1,14 +1,12 @@
 // from https://github.com/tvallotton/rocket_auth/blob/master/examples/postgres.rs, but slightly
 // modified!!
 
-#![feature(decl_macro)]
 use rocket::{request::Form, *};
 use rocket_auth::*;
-use rocket_contrib::templates::{tera, Template};
+use rocket_contrib::templates::{Template};
 use serde_json::json;
 use rocket::response::{Flash, Redirect};
 use rocket::request::FlashMessage;
-use std::collections::HashMap;
 
 
 #[get("/auth/login")]
@@ -30,11 +28,11 @@ pub fn post_login(mut auth: Auth, form: Form<Login>) -> Flash<Redirect> {
             Redirect::to("/posts"),
             "Logged in!",
         ),
-        Err(E) => Flash::error(
+        Err(e) => Flash::error(
             Redirect::to("/auth/login"),
             format!(
                 "Error creating user: {}",
-                E.to_string()
+                e.to_string()
             )
         )
     }
@@ -54,21 +52,21 @@ pub fn get_signup(flash: Option<FlashMessage>) -> Template {
 #[post("/auth/signup", data = "<form>")]
 pub fn post_signup(mut auth: Auth, form: Form<Signup>) -> Flash<Redirect> {
     match auth.signup(&form) {
-        Err(E) => return Flash::error(
+        Err(e) => return Flash::error(
             Redirect::to("/auth/signup"),
             format!(
                 "Error creating user: {}",
-                E.to_string()
+                e.to_string()
             ),
         ),
         _ => ()
     };
     match auth.login(&form.into()) {
-        Err(E) => return Flash::error(
+        Err(e) => return Flash::error(
             Redirect::to("/auth/login"),
             format!(
                 "User created but error logging in: {}",
-                E.to_string()
+                e.to_string()
             ),
         ),
         _ => ()
@@ -81,11 +79,11 @@ pub fn post_signup(mut auth: Auth, form: Form<Signup>) -> Flash<Redirect> {
 
 #[get("/auth/logout")]
 pub fn logout(mut auth: Auth) -> Result<Redirect, String> {
-    auth.logout();
+    auth.logout().expect("Could not log out!");
     Ok(Redirect::to("/"))
 }
 #[get("/auth/delete")]
 pub fn delete(mut auth: Auth) -> Result<Redirect, String> {
-    auth.delete();
+    auth.delete().expect("Could not delete post!");
     Ok(Redirect::to("/"))
 }

@@ -10,7 +10,6 @@ extern crate rocket;
 extern crate diesel;
 extern crate dotenv;
 use rocket_contrib::templates::Template;
-use rocket_auth::Users;
 
 use std::path::{Path, PathBuf};
 use rocket::response::NamedFile;
