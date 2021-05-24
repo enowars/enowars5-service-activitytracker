@@ -25,7 +25,7 @@ table! {
         email -> Varchar,
         password -> Varchar,
         is_admin -> Bool,
-        verification_image -> Nullable<Text>,
+        verification_image -> Text,
     }
 }
 

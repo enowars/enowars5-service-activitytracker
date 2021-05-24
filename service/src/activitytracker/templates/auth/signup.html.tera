@@ -7,12 +7,24 @@
 {% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Back!</a> {% endblock %}
 
 {% block content %}
-    <form action="/auth/signup" method="post">
+    <form enctype="multipart/form-data" action="/auth/signup" method="post">
         <label for="email"><b>Email</b></label>
         <input type="text" placeholder="email address" name="email" required>
 
         <label for="password"><b>Password</b></label>
         <input type="password" placeholder="password" name="password" required>
+
+        <div class="form-group">
+            <label for="image"><b>A selfie:</b></label>
+            <div class="custom-file">
+                <input type="file" name="image" class="custom-file-input" id="image" aria-describedby="imageHelpBlock">
+                <label class="custom-file-label" for="image">Choose picture file</label>
+            </div>
+            <small id="imageHelpBlock" class="form-text text-muted">
+                Hold on to this image, you can use it for password recovery!
+            </small>
+
+        </div>
 
         <button type="submit">Signup</button>
     </form>
