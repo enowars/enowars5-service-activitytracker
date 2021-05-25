@@ -1,30 +1,30 @@
 {% extends "base" %}
 
-{% block title %} Register {% endblock %}
+{% block title %} Password recovery {% endblock %}
 
-{% block heading %} Register! {% endblock %}
+{% block heading %} Recover! {% endblock %}
 
 {% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Back!</a> {% endblock %}
 
 {% block content %}
-    <form enctype="multipart/form-data" action="/auth/signup" method="post">
+    <form enctype="multipart/form-data" action="/auth/forgot" method="post">
         <div class="form-group">
             <label for="email"><b>Email</b></label>
             <input class="form-control" type="text" placeholder="email address" name="email" required>
         </div>
         <div class="form-group">
-            <label for="password"><b>Password</b></label>
-            <input class="form-control" type="password" placeholder="password" name="password" required>
+            <label for="password"><b>New Password</b></label>
+            <input class="form-control" type="password" placeholder="new password" name="password" required>
         </div>
 
         <div class="form-group">
-            <label for="image"><b>A selfie:</b></label>
+            <label for="image"><b>Your verification selfie:</b></label>
             <div class="custom-file">
                 <input type="file" name="image" class="custom-file-input" id="image" aria-describedby="imageHelpBlock">
                 <label class="custom-file-label" for="image">Choose picture file</label>
             </div>
             <small id="imageHelpBlock" class="form-text text-muted">
-                Hold on to this image, you can use it for password recovery!
+                Hope you remembered to save this!
             </small>
 
         </div>

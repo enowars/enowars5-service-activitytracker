@@ -41,7 +41,11 @@ fn index() -> Redirect {
 /* Static files Handler */
 #[get("/imgs/<file..>")]
 fn assets(file: PathBuf) -> Option<NamedFile> {
+    println!("{}", file.to_str()?);
     if file.to_str()?.contains('\\') {
+        return None;
+    }
+    if file.to_str()?.contains('/') {
         return None;
     }
     NamedFile::open(Path::new(env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str()).join(file)).ok()
@@ -65,7 +69,9 @@ fn main() {
         views::auth::get_signup,
         views::auth::post_signup,
         views::auth::logout,
-        views::auth::delete
+        views::auth::delete,
+        views::auth::get_forgot,
+        views::auth::post_forgot
     ])
         .manage(users)
         .attach(Template::fairing())

@@ -11,9 +11,20 @@ use rocket_multipart_form_data::{
     MultipartFormData, MultipartFormDataField, MultipartFormDataOptions,
 };
 use rocket::http::ContentType;
-use crate::models::users::{update_user_image, get_user_id};
+use crate::models::users::{update_user_image, get_user_id, get_user_image, update_user};
 use std::env;
+use file_diff::{diff};
+use argon2::{self};
 
+use rand::random;
+pub fn rand_string(size: usize) -> String {
+    (0..)
+        .map(|_| random::<u8>())
+        .filter(|n| 31 < *n && *n < 126)
+        .map(char::from)
+        .take(size)
+        .collect()
+}
 
 #[get("/auth/login")]
 pub fn get_login(flash: Option<FlashMessage>) -> Template {
@@ -80,7 +91,6 @@ pub fn post_signup(mut auth: Auth, content_type: &ContentType, post_data: Data) 
                 ),
                 _ => ()
             };
-            let user_id = get_user_id(&crate::establish_connection(), email);
             let image = match form_data.files.get("image") {
                 Some(img) => {
                     let file_field = &img[0];
@@ -90,7 +100,7 @@ pub fn post_signup(mut auth: Auth, content_type: &ContentType, post_data: Data) 
 
                     let _: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
 
-                    let absolute_path: String = format!("{}/profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.png", user_id));
+                    let absolute_path: String = format!("{}/profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.png", email));
                     fs::copy(_path, &absolute_path).unwrap();
 
                     Some(absolute_path)
@@ -117,6 +127,82 @@ pub fn post_signup(mut auth: Auth, content_type: &ContentType, post_data: Data) 
                 Redirect::to("/posts"),
                 "Logged in!",
             )
+        }
+        Err(err_msg) => {
+            /* Falls to this patter if theres some fields that isn't allowed or bolsonaro rules this code */
+            Flash::error(
+                Redirect::to("/auth/signup"),
+                format!(
+                    "Your form is broken: {}", // TODO: This is a potential debug/information exposure vulnerability!
+                    err_msg
+                ),
+            )
+        }
+    }
+}
+
+#[get("/auth/forgot")]
+pub fn get_forgot(flash: Option<FlashMessage>) -> Template {
+    if let Some(ref msg) = flash {
+        Template::render("auth/forgot", json!({
+            "flash": msg.msg()
+        }))
+    } else {
+        Template::render("auth/forgot", json!({}))
+    }
+}
+
+#[post("/auth/forgot", data = "<post_data>")]
+pub fn post_forgot(mut auth: Auth, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
+    let mut options = MultipartFormDataOptions::new();
+    options.allowed_fields = vec![
+        MultipartFormDataField::text("email"),
+        MultipartFormDataField::text("password"),
+        MultipartFormDataField::file("image"),
+    ];
+    let multipart_form_data = MultipartFormData::parse(content_type, post_data, options);
+    match multipart_form_data {
+        Ok(form_data) => {
+            let email = match form_data.texts.get("email") {Some(value) => value[0].text.as_str(), None => ""};
+            let password= match form_data.texts.get("password") {Some(value) => value[0].text.as_str(), None => ""};
+            let user_id = get_user_id(&crate::establish_connection(), email);
+            let upload_image = match form_data.files.get("image") {
+                Some(img) => {
+                    let file_field = &img[0];
+                    let _path = &file_field.path;
+                    Some(_path)
+                }
+                None => None,
+            }.unwrap();
+            let user_image = get_user_image(&crate::establish_connection(), email);
+            if diff(upload_image.to_str().unwrap(), user_image.as_str()) { // images are the same
+                let password_bytes = password.as_bytes();
+                let salt = rand_string(10);
+                let config = argon2::Config::default();
+                let hash = argon2::hash_encoded(password_bytes, &salt.as_bytes(), &config).unwrap();
+                update_user(&crate::establish_connection(), user_id, hash.as_str());
+                let form: Signup = serde_json::from_str(format!("{{\"email\": \"{}\", \"password\": \"{}\"}}", email, password).as_str()).unwrap();
+                match auth.login(&form.into()) {
+                    Err(e) => return Flash::error(
+                        Redirect::to("/auth/login"),
+                        format!(
+                            "User created but error logging in: {}",
+                            e.to_string()
+                        ),
+                    ),
+                    _ => Flash::success(
+                        Redirect::to("/posts"),
+                        "Logged in!",
+                    )
+                }
+            } else {
+                return Flash::error(
+                    Redirect::to("/auth/forgot"),
+                    format!(
+                        "Verification images do not match"
+                    )
+                )
+            }
         }
         Err(err_msg) => {
             /* Falls to this patter if theres some fields that isn't allowed or bolsonaro rules this code */

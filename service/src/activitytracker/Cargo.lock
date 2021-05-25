@@ -8,10 +8,13 @@ version = "0.1.0"
 dependencies = [
  "diesel",
  "dotenv",
+ "file_diff",
+ "rand 0.8.3",
  "rocket",
  "rocket-multipart-form-data",
  "rocket_auth",
  "rocket_contrib",
+ "rust-argon2",
  "serde",
  "serde_json",
 ]
@@ -475,6 +478,12 @@ name = "fallible-streaming-iterator"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
+
+[[package]]
+name = "file_diff"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31a7a908b8f32538a2143e59a6e4e2508988832d5d4d6f7c156b3cbc762643a5"
 
 [[package]]
 name = "filetime"

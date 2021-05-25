@@ -43,6 +43,14 @@ pub fn get_user_id(conn: &PgConnection, email: &str) -> i32 {
         .expect("No such user.")
 }
 
+pub fn get_user_image(conn: &PgConnection, email: &str) -> String {
+    users::table
+        .select(dsl::verification_image)
+        .filter(dsl::email.eq(email))
+        .first(conn)
+        .expect("No such user.")
+}
+
 pub fn update_user(conn: &PgConnection, id: i32, password: &str) -> User {
     diesel::update(dsl::users.find(id))
         .set(dsl::password.eq(password))

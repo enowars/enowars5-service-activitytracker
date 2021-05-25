@@ -7,6 +7,8 @@ import random
 import string
 import barnum
 import os
+from PIL import Image
+import secrets
 
 #### Checker Tenets
 # A checker SHOULD not be easily identified by the examination of network traffic => This one is not satisfied, because our usernames and notes are simple too random and easily identifiable.
@@ -30,23 +32,39 @@ class ActivitytrackerChecker(BaseChecker):
     """
 
     ##### EDIT YOUR CHECKER PARAMETERS
-    flag_variants = 1
+    flag_variants = 2
     noise_variants = 2
     havoc_variants = 2
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
     ##### END CHECKER PARAMETERS
 
+    def generate_random_image(self, filename):
+        im = Image.open('images/profile.png')
+        # im = Image.new('RGB', (30, 30))
+        pixels = im.load()
+        for x in range(min(30, im.size[0])):
+            for y in range(min(30, im.size[1])):
+                pixels[x, y] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        im.save(filename, format='png')
+        return filename
+
     def register_user(self, email: str, password: str):
         self.debug(
             f"Sending command to register user: {email} with password: {password}"
         )
         self.http_get("/auth/signup")
-        resp = self.http_post("/auth/signup",
-                              data={
-                                  "email": email,
-                                  "password": password
-                              })
+        filename = secrets.token_urlsafe(10) + ".png"
+        self.generate_random_image(filename)
+        with open(filename, 'rb') as verification_image:
+            resp = self.http_post("/auth/signup",
+                                  data={
+                                      "email": email,
+                                      "password": password
+                                  },
+                                  files={
+                                      "image": verification_image
+                                  })
         if resp.status_code != 303:
             self.debug(resp)
             raise EnoException(f"Unexpected status code while registering user: {resp.status_code}")
@@ -141,7 +159,42 @@ class ActivitytrackerChecker(BaseChecker):
                 "username": boss_email,
                 "password": boss_password,
             }
+        elif self.variant_id == 1:
+            # First we need to register a user. So let's create some random strings. (Your real checker should use some funny usernames or so)
+            firstname, lastname = barnum.create_name()
+            company = barnum.create_company_name()
+            jobtitle = barnum.create_job_title()
+            password = barnum.create_pw(length=10)
+            email = barnum.create_email(name=(firstname, lastname))
 
+            self.register_user(email, password)
+
+            self.http_get('/posts')
+
+            self.generate_random_posts(random.randint(0, 5), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password}, templates='simple')
+
+            self.http_get('/posts/new')
+            self.http_post('/posts/insert', files={
+                "body": f"I kept forgetting my passwords, but then I discovered that they can be saved in a private post!",
+                "visibility": "public"
+            })
+
+            self.http_post('/posts/insert', files={
+                "body": self.flag,
+                "visibility": "private"
+            })
+
+            self.generate_random_posts(random.randint(0, 5), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password}, templates='simple')
+            self.http_get('/posts')
+
+
+            self.http_get('/auth/logout')
+
+            # Save the generated values for the associated getflag() call.
+            self.chain_db = {
+                "username": email,
+                "password": password,
+            }
         else:
             raise EnoException("Wrong variant_id provided")
 
@@ -155,7 +208,7 @@ class ActivitytrackerChecker(BaseChecker):
                 if nothing is returned, the service status is considered okay.
                 the preferred way to report errors in the service is by raising an appropriate enoexception
         """
-        if self.variant_id == 0:
+        if self.variant_id == 0 or self.variant_id == 1:
             # First we check if the previous putflag succeeded!
             try:
                 username: str = self.chain_db["username"]

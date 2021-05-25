@@ -22,3 +22,4 @@ typish==1.9.2
 urllib3==1.26.4
 Werkzeug==1.0.1
 barnum==0.5.1
+Pillow==8.2.0
