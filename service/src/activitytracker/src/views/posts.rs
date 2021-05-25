@@ -3,7 +3,6 @@ use crate::schema::*;
 use crate::models::posts::*;
 
 use rocket_contrib::templates::Template;
-use std::collections::HashMap;
 
 use rocket::request::FlashMessage;
 use rocket::response::{Flash, Redirect};
@@ -78,7 +77,7 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
                     let _file_name = &file_field.file_name;
                     let _path = &file_field.path;
 
-                    let format: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
+                    let _: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
 
                     let absolute_path: String = format!("{}{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), _file_name.clone().unwrap());
                     fs::copy(_path, &absolute_path).unwrap();
@@ -150,6 +149,7 @@ pub fn update(user: User, flash: Option<FlashMessage>, email: String, id: i32) -
 }
 
 #[post("/posts/update", data = "<post_data>")]
+#[allow(unused_variables)] // variable user is needed for permissions handler
 pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
     use std::fs;
 
@@ -172,7 +172,7 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
                     let _file_name = &file_field.file_name;
                     let _path = &file_field.path;
 
-                    let format: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
+                    let _: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
 
                     let absolute_path: String = format!("{}{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), _file_name.clone().unwrap());
                     fs::copy(_path, &absolute_path).unwrap();
@@ -216,6 +216,7 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
 }
 
 #[get("/posts/delete/<email>/<id>")]
+#[allow(unused_variables)] // variable user is needed for permissions handler
 pub fn delete(user: User, email: String, id: i32) -> Flash<Redirect> {
     let email_id: i32 = users::table
         .select(users::id)

@@ -1,4 +1,5 @@
 #![feature(proc_macro_hygiene, decl_macro)]
+#![feature(option_result_contains)]
 
 pub mod schema;
 pub mod models;
@@ -10,7 +11,6 @@ extern crate rocket;
 extern crate diesel;
 extern crate dotenv;
 use rocket_contrib::templates::Template;
-use rocket_auth::Users;
 
 use std::path::{Path, PathBuf};
 use rocket::response::NamedFile;
@@ -35,22 +35,19 @@ pub fn establish_connection() -> PgConnection {
 
 #[get("/")]
 fn index() -> Redirect {
-    // use schema::posts::dsl::*;
-    //
-    // let connection = establish_connection();
-    //
-    // let results = posts.filter(deleted.eq(false))
-    //     .limit(5)
-    //     .load::<models::posts::Post>(&connection)
-    //     .expect("Error loading posts");
-    //
-    // format!("There are {} posts.", results.len())
     Redirect::to("/posts")
 }
 
 /* Static files Handler */
 #[get("/imgs/<file..>")]
 fn assets(file: PathBuf) -> Option<NamedFile> {
+    println!("{}", file.to_str()?);
+    if file.to_str()?.contains('\\') {
+        return None;
+    }
+    if file.to_str()?.contains('/') {
+        return None;
+    }
     NamedFile::open(Path::new(env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str()).join(file)).ok()
 }
 
@@ -72,7 +69,9 @@ fn main() {
         views::auth::get_signup,
         views::auth::post_signup,
         views::auth::logout,
-        views::auth::delete
+        views::auth::delete,
+        views::auth::get_forgot,
+        views::auth::post_forgot
     ])
         .manage(users)
         .attach(Template::fairing())

@@ -3,6 +3,7 @@ set -e
 set -x
 
 mkdir -p /data/imgs
+mkdir -p /data/imgs/profiles
 
 # wait for database connection
 until nc -vz -w 100 postgres 5432

@@ -20,9 +20,6 @@ RUN apt-get install libpq-dev -y
 RUN apt-get install netcat -y
 RUN cargo install diesel_cli --no-default-features --features postgres
 
-COPY entrypoint.sh /
-RUN chmod +x /entrypoint.sh
-
 RUN cargo init
 COPY ./src/activitytracker/Cargo.* ./
 RUN cargo build --release
@@ -35,6 +32,9 @@ RUN touch /service/src/main.rs
 #RUN diesel migration run
 
 RUN cargo build --release
+
+COPY entrypoint.sh /
+RUN chmod +x /entrypoint.sh
 
 # Run the service
 #ENTRYPOINT ["cargo", "run"]

@@ -13,6 +13,9 @@ dotenv = "0.15.0"
 serde = { version = "1.0.125", features = ["derive"] }
 rocket-multipart-form-data = "0.9.6"
 serde_json = "1.0.64"
+file_diff = "1.0.0"
+rust-argon2 = "0.8.3"
+rand = "0.8.3"
 
 [dependencies.rocket_contrib]
 version = "0.4.7"
