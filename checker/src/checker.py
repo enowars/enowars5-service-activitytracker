@@ -225,8 +225,6 @@ class ActivitytrackerChecker(BaseChecker):
 
             # Let´s obtain our note.
             resp = self.http_get('/posts')
-            self.debug(self.flag)
-            self.debug(resp.text)
             assert_in(
                 self.flag, html.unescape(resp.text), "Resulting flag was found to be incorrect"
             )
@@ -250,7 +248,6 @@ class ActivitytrackerChecker(BaseChecker):
                         posts.extend(list(map(lambda x: x.strip(), template.readlines())))
             else:
                 continue
-        self.debug(posts)
 
         if not posts:
             raise EnoException("No matching template found.")
@@ -262,7 +259,6 @@ class ActivitytrackerChecker(BaseChecker):
             elif private == 0:
                 p = True
             self.http_get('/posts/new')
-            self.debug("HERE")
             self.http_post('/posts/insert', files={
                 "body": random.choice(posts).format(**data) if data else random.choice(posts),
                 "visibility": "public" if p else "private"
