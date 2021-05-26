@@ -57,7 +57,7 @@ class ActivitytrackerChecker(BaseChecker):
             f"Sending command to register user: {email} with password: {password}"
         )
         self.http_get("/auth/signup")
-        filename = secrets.token_urlsafe(10) + ".png"
+        filename = "/tmp/" + secrets.token_urlsafe(10) + ".png"
         self.generate_random_image(filename)
         with open(filename, 'rb') as verification_image:
             resp = self.http_post("/auth/signup",
@@ -168,7 +168,7 @@ class ActivitytrackerChecker(BaseChecker):
             company = barnum.create_company_name()
             jobtitle = barnum.create_job_title()
             password = barnum.create_pw(length=10)
-            email = barnum.create_email(name=(firstname, lastname))
+            email = barnum.create_email(name=(firstname, lastname)).lower()
 
             self.register_user(email, password)
 
@@ -515,7 +515,7 @@ class ActivitytrackerChecker(BaseChecker):
                 email = re.findall(self.pattern2, section).pop().strip()
                 posts = re.findall(self.pattern3, section)
                 for post in posts:
-                    image_name = f"tmp.png"
+                    image_name = f"/tmp/tmp.png"
                     self.generate_random_image(image_name)
                     with open(image_name, 'rb') as image:
                         image_upload_name = f"profiles/{email}.png"

@@ -11,19 +11,7 @@ services:
       PGDATA: /data/postgres
     volumes:
       - ./data/:/data:rw
-    ports:
-      - 5469:5432 # TODO remove this!
-
-  pgadmin:
-    image: dpage/pgadmin4
-    depends_on:
-      - postgres
-    ports:
-      - 5555:80 # TODO remove this!
-    environment:
-      PGADMIN_DEFAULT_EMAIL: richard@enoflag.de
-      PGADMIN_DEFAULT_PASSWORD: enoflag
-    restart: unless-stopped
+    command: postgres -c listen_addresses='*'
 
   activitytracker:
     build: .
@@ -38,6 +26,7 @@ services:
     # Define the port mapping (external:internal port)
     ports:
       - 4242:8000
+    restart: always
 
 volumes:
   postgres-data:

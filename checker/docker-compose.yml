@@ -5,7 +5,7 @@ services:
     build: .
     # The checker runs a HTTP interfaces, so we need to map port 3031 to the outside (port 8000).
     ports:
-      - 8000:3031
+      - 2424:3031
     environment:
      - MONGO_ENABLED=1
      - MONGO_HOST=activitytracker-mongo
