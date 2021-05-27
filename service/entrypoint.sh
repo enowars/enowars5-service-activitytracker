@@ -18,4 +18,4 @@ do
 done
 diesel migration run
 
-cargo run --release
+ROCKET_ENV=production cargo run --release
