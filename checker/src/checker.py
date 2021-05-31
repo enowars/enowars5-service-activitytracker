@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import html
 
+import requests
 from enochecker import BaseChecker, BrokenServiceException, EnoException, run
+from enochecker.storeddict import DB_DEFAULT_DIR, DB_GLOBAL_CACHE_SETTING
 from enochecker.utils import assert_in
 import random
 import string
@@ -10,6 +12,8 @@ import os
 from PIL import Image
 import secrets
 import re
+
+from enochecker_core import CheckerTaskMessage
 
 
 class ActivitytrackerChecker(BaseChecker):
@@ -34,7 +38,19 @@ class ActivitytrackerChecker(BaseChecker):
     exploit_variants = 2
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
+
     # END CHECKER PARAMETERS
+
+    def __init__(self, task: CheckerTaskMessage,
+                 storage_dir: str = DB_DEFAULT_DIR,
+                 use_db_cache: bool = DB_GLOBAL_CACHE_SETTING,
+                 json_logging: bool = True, ):
+        super().__init__(
+            task,
+            storage_dir,
+            use_db_cache,
+            json_logging)
+        self.http_session.verify = True
 
     @staticmethod
     def generate_random_image(filename):
@@ -121,7 +137,10 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.http_get('/posts')
 
-            self.generate_random_posts(random.randint(0, 3), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password, "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
+            self.generate_random_posts(random.randint(0, 3),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle, "password": password,
+                                             "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
 
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
@@ -129,7 +148,10 @@ class ActivitytrackerChecker(BaseChecker):
                 "visibility": "public"
             })
 
-            self.generate_random_posts(random.randint(0, 3), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password, "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
+            self.generate_random_posts(random.randint(0, 3),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle, "password": password,
+                                             "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
             self.http_get('/posts')
 
             self.http_get('/auth/logout')
@@ -158,7 +180,9 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.http_get('/posts')
 
-            self.generate_random_posts(random.randint(0, 3), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password}, templates='simple')
+            self.generate_random_posts(random.randint(0, 3),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle, "password": password}, templates='simple')
 
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
@@ -171,7 +195,9 @@ class ActivitytrackerChecker(BaseChecker):
                 "visibility": "private"
             })
 
-            self.generate_random_posts(random.randint(0, 3), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password}, templates='simple')
+            self.generate_random_posts(random.randint(0, 3),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle, "password": password}, templates='simple')
             self.http_get('/posts')
 
             self.http_get('/auth/logout')
@@ -267,14 +293,18 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.generate_random_posts(n=random.randint(0, 3), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password}, templates="simple")
+            self.generate_random_posts(n=random.randint(0, 3),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle, "password": password}, templates="simple")
             self.http_get('/posts')
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": text,
                 "visibility": "public" if self.variant_id == 0 else "private"
             })
-            self.generate_random_posts(n=random.randint(0, 3), data={"firstname": firstname, "lastname": lastname, "company": company, "jobtitle": jobtitle, "password": password}, templates="simple")
+            self.generate_random_posts(n=random.randint(0, 3),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle, "password": password}, templates="simple")
             self.http_get('/posts')
 
             self.chain_db = {
@@ -462,13 +492,19 @@ class ActivitytrackerChecker(BaseChecker):
                     # generate email to attack
                     email_to_attack = self.guess_boss_email(email, post[0], post[1])
                     n = 0
+                    self.debug(f"attacking {email_to_attack}")
                     while True:
                         n += 1
                         # get flag by editing post based on known email
                         resp = self.http_get(f"/posts/update/{email_to_attack}/{n}")
                         if resp.status_code != 200:
                             break
+
                         t = html.unescape(resp.text)
+                        if "form" not in t:
+                            break
+                        for flag in self._flag_regex.findall(t):
+                            self.debug(f"flag from exploit 1: {flag.encode()}")
                         f = self.search_flag(t)
                         if f:
                             return f
@@ -510,6 +546,8 @@ class ActivitytrackerChecker(BaseChecker):
                     # get flag
                     resp = self.http_get(f"/posts")
                     t = html.unescape(resp.text)
+                    for flag in self._flag_regex.findall(t):
+                        self.debug(f"flag from exploit 2: {flag.encode()}")
                     f = self.search_flag(t)
                     if f:
                         return f

@@ -43,12 +43,17 @@ fn index() -> Redirect {
 fn assets(file: PathBuf) -> Option<NamedFile> {
     println!("{}", file.to_str()?);
     if file.to_str()?.contains('\\') {
-        return None;
+        return NamedFile::open(Path::new("imgs/default.jpg")).ok();
     }
     if file.to_str()?.contains('/') {
-        return None;
+        return NamedFile::open(Path::new("imgs/default.jpg")).ok();
     }
-    NamedFile::open(Path::new(env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str()).join(file)).ok()
+    let path = Path::new(env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str()).join(file);
+    if path.exists() {
+        NamedFile::open(path).ok()
+    } else {
+        NamedFile::open(Path::new("imgs/default.jpg")).ok()
+    }
 }
 
 fn main() {
