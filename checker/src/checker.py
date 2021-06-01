@@ -428,12 +428,12 @@ class ActivitytrackerChecker(BaseChecker):
                 "body": random_validation_text,
                 "visibility": "public"
             })
-            resp = self.check_pages(random_validation_text)
+            resp = html.unescape(self.http_get('/posts/my').text)
             assert_in(random_validation_text, resp)
             t = resp.split("\">Delete</a>")[0]
             url = t.split("href=\"")[-1]
             self.http_get(url)
-            resp = self.check_pages(random_validation_text)
+            resp = html.unescape(self.http_get('/posts/my').text)
             if random_validation_text in resp:
                 raise BrokenServiceException(
                     "Received unexpected response.",
