@@ -25,11 +25,13 @@
     <div class="row">
         <div class="col">
             <h1 class="display-1">
-                {% block heading %}Title!{% endblock %}
+                <a href="/posts/0" class="text-decoration-none">
+                    {% block heading %}Title!{% endblock %}
+                </a>
                 {% block action %}<a class="btn btn-primary btn-lg float-right" href="/posts/new">Action!</a>{% endblock %}
                 {% if user %}
                     <a class="btn btn-danger btn-lg float-right mr-1" href="/auth/logout">Logout</a>
-                    <div class="btn btn-lg float-right mr-1">Logged in as {{ user }}</div>
+                    <a class="btn btn-lg float-right mr-1" href="/posts/my">Your Posts</a>
                 {% else %}
                     <a class="btn btn-primary btn-lg float-right mr-1" href="/auth/login">Login</a>
                     <a class="btn btn-primary btn-lg float-right mr-1" href="/auth/signup">Register</a>

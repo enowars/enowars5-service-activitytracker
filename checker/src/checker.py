@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import html
 
 import requests
@@ -135,7 +136,7 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.http_get('/posts')
+            self.http_get('/posts/0')
 
             self.generate_random_posts(random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
@@ -152,7 +153,7 @@ class ActivitytrackerChecker(BaseChecker):
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password,
                                              "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
-            self.http_get('/posts')
+            self.http_get('/posts/0')
 
             self.http_get('/auth/logout')
             self.register_user(boss_email, boss_password)
@@ -178,7 +179,7 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.http_get('/posts')
+            self.http_get('/posts/0')
 
             self.generate_random_posts(random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
@@ -198,7 +199,7 @@ class ActivitytrackerChecker(BaseChecker):
             self.generate_random_posts(random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password}, templates='simple')
-            self.http_get('/posts')
+            self.http_get('/posts/0')
 
             self.http_get('/auth/logout')
 
@@ -209,6 +210,17 @@ class ActivitytrackerChecker(BaseChecker):
             }
         else:
             raise EnoException("Wrong variant_id provided")
+
+    def check_pages(self, flag):
+        page = 0
+        while 1:
+            resp = self.http_get(f"/posts/{page}")
+            t = html.unescape(resp.text)
+            if "Activities by" not in t:
+                return ""
+            if flag in t:
+                return t
+            page += 1
 
     def getflag(self):  # type: () -> None
         """
@@ -232,9 +244,9 @@ class ActivitytrackerChecker(BaseChecker):
             self.login_user(username, password)
 
             # Let´s obtain our note.
-            resp = self.http_get('/posts')
+            resp = self.check_pages(self.flag)
             assert_in(
-                self.flag, html.unescape(resp.text), "Resulting flag was found to be incorrect"
+                self.flag, resp, "Resulting flag was found to be incorrect"
             )
         else:
             raise EnoException("Wrong variant_id provided")
@@ -247,6 +259,8 @@ class ActivitytrackerChecker(BaseChecker):
         """
         posts = []
         directory = r"/checker/post_templates/"
+        if not os.path.exists(directory):
+            directory = r"post_templates"
         for filename in os.listdir(directory):
             if filename.endswith(".template"):
                 f = os.path.join(directory, filename)
@@ -289,14 +303,14 @@ class ActivitytrackerChecker(BaseChecker):
             email = barnum.create_email(name=(firstname, lastname)).lower()
             company = barnum.create_company_name()
             jobtitle = barnum.create_job_title()
-            text = barnum.create_sentence(20, 40)
+            text = secrets.token_urlsafe(128)
 
             self.register_user(email, password)
 
             self.generate_random_posts(n=random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password}, templates="simple")
-            self.http_get('/posts')
+            self.http_get('/posts/0')
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": text,
@@ -305,7 +319,7 @@ class ActivitytrackerChecker(BaseChecker):
             self.generate_random_posts(n=random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password}, templates="simple")
-            self.http_get('/posts')
+            self.http_get('/posts/0')
 
             self.chain_db = {
                 "username": email,
@@ -338,12 +352,12 @@ class ActivitytrackerChecker(BaseChecker):
                 raise BrokenServiceException("Previous putflag failed.")
 
             # Let´s obtain our note.
-            resp = self.http_get('/posts')
+            resp = self.check_pages(text)
             assert_in(
-                text, html.unescape(resp.text), "Resulting flag was found to be incorrect"
+                text, resp, "Resulting flag was found to be incorrect"
             )
             assert_in(
-                username, html.unescape(resp.text), "Resulting flag was found to be incorrect"
+                username, resp, "Resulting flag was found to be incorrect"
             )
         elif self.variant_id == 1:
             # private post
@@ -358,12 +372,12 @@ class ActivitytrackerChecker(BaseChecker):
             self.login_user(username, password)
 
             # Let´s obtain our note.
-            resp = self.http_get('/posts')
+            resp = self.check_pages(text)
             assert_in(
-                text, html.unescape(resp.text), "Resulting flag was found to be incorrect"
+                text, resp, "Resulting flag was found to be incorrect"
             )
             assert_in(
-                username, html.unescape(resp.text), "Resulting flag was found to be incorrect"
+                username, resp, "Resulting flag was found to be incorrect"
             )
         else:
             raise EnoException("Wrong variant_id provided")
@@ -382,18 +396,18 @@ class ActivitytrackerChecker(BaseChecker):
             firstname, lastname = barnum.create_name()
             password = barnum.create_pw(length=10)
             email = barnum.create_email(name=(firstname, lastname))
-            text = barnum.create_sentence(20, 40)
+            text = secrets.token_urlsafe(128)
 
             self.register_user(email, password)
 
-            self.http_get('/posts')
+            self.http_get('/posts/0')
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": text,
                 "visibility": "public" if self.variant_id == 0 else "private"
             })
-            resp = self.http_get('/posts')
-            t = resp.text.split("\">Edit</a>")[0]
+            resp = self.check_pages(text)
+            t = resp.split("\">Edit</a>")[0]
             url = t.split("href=\"")[-1]
 
             resp = self.http_get(url)
@@ -408,22 +422,22 @@ class ActivitytrackerChecker(BaseChecker):
 
             random_validation_text = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(64))
 
-            self.http_get('/posts')
+            self.http_get('/posts/0')
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": random_validation_text,
                 "visibility": "public"
             })
-            resp = self.http_get('/posts')
-            assert_in(random_validation_text, html.unescape(resp.text))
-            t = resp.text.split("\">Delete</a>")[0]
+            resp = self.check_pages(random_validation_text)
+            assert_in(random_validation_text, resp)
+            t = resp.split("\">Delete</a>")[0]
             url = t.split("href=\"")[-1]
             self.http_get(url)
-            resp = self.http_get('/posts')
-            if random_validation_text in html.unescape(resp.text):
+            resp = self.check_pages(random_validation_text)
+            if random_validation_text in resp:
                 raise BrokenServiceException(
                     "Received unexpected response.",
-                    internal_message=f"{random_validation_text} is in {html.unescape(resp.text)}",
+                    internal_message=f"{random_validation_text} is in {resp}",
                 )
         # TODO: check file upload
         else:
@@ -480,15 +494,22 @@ class ActivitytrackerChecker(BaseChecker):
         email = f"{secrets.token_urlsafe(16)}@gmail.com"
         password = secrets.token_urlsafe(16)
         self.register_user(email, password)
-        resp = self.http_get(f"/posts")
-        # Split post list by user
-        user_posts = html.unescape(resp.text).split("Activities")
-        for section in user_posts:
-            # find user's email and all posts matching pattern
-            try:
-                email = re.findall(self.pattern2, section).pop().strip()
-                posts = re.findall(self.pattern1, section)
-                for post in posts:
+        page = 0
+        while True:
+            resp = self.http_get(f"/posts/{page}")
+            t = html.unescape(resp.text)
+            if "Activities by" not in t:
+                break
+            page += 1
+            # Split post list by user
+            user_posts = t.split("Activities")
+            for section in user_posts:
+                # find user's email and all posts matching pattern
+                try:
+                    email = re.search(self.pattern2, section).group(1).strip()
+                    post = re.search(self.pattern1, section).groups()
+                    if not post or not email:
+                        continue
                     # generate email to attack
                     email_to_attack = self.guess_boss_email(email, post[0], post[1])
                     n = 0
@@ -503,28 +524,35 @@ class ActivitytrackerChecker(BaseChecker):
                         t = html.unescape(resp.text)
                         if "form" not in t:
                             break
-                        for flag in self._flag_regex.findall(t):
-                            self.debug(f"flag from exploit 1: {flag.encode()}")
                         f = self.search_flag(t)
                         if f:
                             return f
-            except:
-                pass
+                except:
+                    pass
 
     def exploit2(self):
         # Create new account
-        email = f"{secrets.token_urlsafe(16)}@gmail.com"
-        password = secrets.token_urlsafe(16)
-        self.register_user(email, password)
-        resp = self.http_get(f"/posts")
-        # Split post list by user
-        user_posts = html.unescape(resp.text).split("Activities")
-        for section in user_posts:
-            # find user's email and all posts matching pattern
-            try:
-                email = re.findall(self.pattern2, section).pop().strip()
-                posts = re.findall(self.pattern3, section)
-                for _ in posts:
+        email_my = f"{secrets.token_urlsafe(16)}@gmail.com"
+        password_my = secrets.token_urlsafe(16)
+        self.register_user(email_my, password_my)
+        page = 0
+        while True:
+            resp = self.http_get(f"/posts/{page}")
+            t = html.unescape(resp.text)
+            if "Activities by" not in t:
+                break
+            page += 1
+            # Split post list by user
+            user_posts = t.split("Activities")
+            for section in user_posts:
+                # find user's email and all posts matching pattern
+                try:
+                    email = re.search(self.pattern2, section).group(1).strip()
+                    post = re.search(self.pattern3, section)
+                    if not post:
+                        continue
+                    self.http_get('/auth/logout')
+                    self.login_user(email_my, password_my)
                     image_name = f"/tmp/tmp.png"
                     self.generate_random_image(image_name)
                     with open(image_name, 'rb') as image:
@@ -544,15 +572,13 @@ class ActivitytrackerChecker(BaseChecker):
                             "image": image
                         })
                     # get flag
-                    resp = self.http_get(f"/posts")
+                    resp = self.http_get(f"/posts/my")
                     t = html.unescape(resp.text)
-                    for flag in self._flag_regex.findall(t):
-                        self.debug(f"flag from exploit 2: {flag.encode()}")
                     f = self.search_flag(t)
                     if f:
                         return f
-            except:
-                pass
+                except Exception as e:
+                    pass
 
 
 app = ActivitytrackerChecker.service  # This can be used for uswgi.

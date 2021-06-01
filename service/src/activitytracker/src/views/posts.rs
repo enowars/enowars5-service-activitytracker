@@ -18,7 +18,19 @@ use std::env;
 
 
 #[get("/posts")]
-pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>) -> Template {
+pub fn get_posts_redirect() -> Redirect {
+    Redirect::to("/posts/0")
+}
+
+// from https://www.reddit.com/r/rust/comments/bk7v15/my_next_favourite_way_to_divide_integers_rounding/
+fn div_up(a: usize, b: usize) -> usize {
+    // We *know* that the hint is exact, this is thus precisely the amount of chunks of length `b` each
+    (0..a).step_by(b).size_hint().0
+}
+
+
+#[get("/posts/<page>")]
+pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -> Template {
     let uap = UsersAndPosts::load_all(
         match user {
             Some(ref u) => u.id(),
@@ -26,9 +38,8 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>) -> Template {
         },
         &crate::establish_connection()
     );
-
     Template::render("posts/post_list", json!({
-            "data": uap,
+            "data": uap[std::cmp::min(page*10, uap.len())..std::cmp::min(page*10+10, uap.len())],
             "flash": match flash {
                 Some(ref msg) => msg.msg(),
                 None => "List of activities"
@@ -36,7 +47,32 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>) -> Template {
             "user": match user {
                 Some(u) => u.email().to_string(),
                 None => "".to_string()
-            }
+            },
+            "page": page,
+            "max_page": div_up(uap.len(), 10) - 1,
+            "start_page": if page < 2 {0} else {page-3},
+            "end_page": std::cmp::min(div_up(uap.len(), 10) - 1, page + 3)
+        }))
+}
+
+#[get("/posts/my")]
+pub fn my_posts(user: User, flash: Option<FlashMessage>) -> Template {
+    let mut uap = UsersAndPosts::load_all(user.id(),
+        &crate::establish_connection()
+    );
+    uap.retain(|u| u.0.id == user.id());
+
+    Template::render("posts/post_list", json!({
+            "data": uap,
+            "flash": match flash {
+                Some(ref msg) => msg.msg(),
+                None => "List of activities"
+            },
+            "user": user.email().to_string(),
+            "page": 0,
+            "max_page": 0,
+            "start_page": 0,
+            "end_page": 0
         }))
 }
 

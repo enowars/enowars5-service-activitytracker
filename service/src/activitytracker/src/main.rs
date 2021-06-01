@@ -63,7 +63,9 @@ fn main() {
     rocket::ignite().mount("/", routes![
         index,
         assets,
+        views::posts::get_posts_redirect,
         views::posts::get_posts,
+        views::posts::my_posts,
         views::posts::new,
         views::posts::insert,
         views::posts::update,

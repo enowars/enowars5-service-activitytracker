@@ -33,7 +33,7 @@ pub struct NewPost<'a> {
 }
 
 #[derive(Serialize)]
-pub struct UsersAndPosts(User, Vec<Post>);
+pub struct UsersAndPosts(pub User, Vec<Post>);
 impl From<(User, Vec<Post>)> for UsersAndPosts {
     fn from(elements: (User, Vec<Post>)) -> Self {
         UsersAndPosts(elements.0, elements.1)
@@ -41,13 +41,15 @@ impl From<(User, Vec<Post>)> for UsersAndPosts {
 }
 impl UsersAndPosts {
     pub fn load_all(email_id: i32, conn: &PgConnection) -> Vec<UsersAndPosts>{
-        let users: Vec<User> = users::table.load::<User>(conn).expect("Error loading users").into_iter().rev().collect();
+        let users: Vec<User> = users::table.order_by(users::id.desc()).load::<User>(conn).expect("Error loading users").into_iter().collect();
         let posts = Post::belonging_to(&users)
             .filter(posts::deleted.eq(false))
             .filter(posts::visibility.eq("public").or(posts::user_id.eq(email_id)))
             .load::<Post>(conn).expect("Error loading posts")
             .grouped_by(&users);
-        users.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>()
+        let mut res = users.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>();
+        res.retain(|uap| !uap.1.is_empty());
+        res
     }
 }
 
