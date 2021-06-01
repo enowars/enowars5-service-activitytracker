@@ -1,2 +1,3 @@
 [global]
 keep_alive = 30
+workers = 128
