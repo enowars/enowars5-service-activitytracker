@@ -237,7 +237,7 @@ class ActivitytrackerChecker(BaseChecker):
             try:
                 username: str = self.chain_db["username"]
                 password: str = self.chain_db["password"]
-            except IndexError as ex:
+            except (IndexError, KeyError) as ex:
                 self.debug(f"error getting notes from db: {ex}")
                 raise BrokenServiceException("Previous putflag failed.")
 
@@ -347,7 +347,7 @@ class ActivitytrackerChecker(BaseChecker):
             try:
                 username: str = self.chain_db["username"]
                 text: str = self.chain_db["text"]
-            except IndexError as ex:
+            except (IndexError, KeyError) as ex:
                 self.debug(f"error getting notes from db: {ex}")
                 raise BrokenServiceException("Previous putflag failed.")
 
@@ -365,7 +365,7 @@ class ActivitytrackerChecker(BaseChecker):
                 username: str = self.chain_db["username"]
                 password: str = self.chain_db["password"]
                 text: str = self.chain_db["text"]
-            except IndexError as ex:
+            except (IndexError, KeyError) as ex:
                 self.debug(f"error getting notes from db: {ex}")
                 raise BrokenServiceException("Previous putflag failed.")
 
