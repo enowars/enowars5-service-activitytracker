@@ -17,6 +17,9 @@ use serde_json::json;
 use std::env;
 
 
+const PAGE_SIZE: usize = 10;
+
+
 #[get("/posts")]
 pub fn get_posts_redirect() -> Redirect {
     Redirect::to("/posts/0")
@@ -36,6 +39,8 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -
             Some(ref u) => u.id(),
             None => -1,
         },
+        PAGE_SIZE,
+        page,
         &crate::establish_connection()
     );
     Template::render("posts/post_list", json!({
@@ -57,7 +62,7 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -
 
 #[get("/posts/my")]
 pub fn my_posts(user: User, flash: Option<FlashMessage>) -> Template {
-    let mut uap = UsersAndPosts::load_all(user.id(),
+    let mut uap = UsersAndPosts::load_mine(user.id(),
         &crate::establish_connection()
     );
     uap.retain(|u| u.0.id == user.id());

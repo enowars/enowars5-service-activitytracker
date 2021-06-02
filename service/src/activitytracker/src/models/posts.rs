@@ -40,8 +40,8 @@ impl From<(User, Vec<Post>)> for UsersAndPosts {
     }
 }
 impl UsersAndPosts {
-    pub fn load_all(email_id: i32, conn: &PgConnection) -> Vec<UsersAndPosts>{
-        let users: Vec<User> = users::table.order_by(users::id.desc()).load::<User>(conn).expect("Error loading users").into_iter().collect();
+    pub fn load_all(email_id: i32, page_size: usize, page: usize, conn: &PgConnection) -> Vec<UsersAndPosts>{
+        let users: Vec<User> = users::table.order_by(users::id.desc()).limit(page_size as i64).offset((page*page_size) as i64).load::<User>(conn).expect("Error loading users").into_iter().collect();
         let posts = Post::belonging_to(&users)
             .filter(posts::deleted.eq(false))
             .filter(posts::visibility.eq("public").or(posts::user_id.eq(email_id)))
@@ -50,6 +50,14 @@ impl UsersAndPosts {
         let mut res = users.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>();
         res.retain(|uap| !uap.1.is_empty());
         res
+    }
+    pub fn load_mine(email_id: i32, conn: &PgConnection) -> Vec<UsersAndPosts>{
+        let user: Vec<User> = users::table.filter(users::id.eq(email_id)).load::<User>(conn).expect("Error loading users").into_iter().collect();
+        let posts = Post::belonging_to(&user)
+            .filter(posts::deleted.eq(false))
+            .load::<Post>(conn).expect("Error loading posts")
+            .grouped_by(&user);
+        user.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>()
     }
 }
 
