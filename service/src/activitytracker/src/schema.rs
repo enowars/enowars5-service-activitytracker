@@ -26,6 +26,7 @@ table! {
         password -> Varchar,
         is_admin -> Bool,
         verification_image -> Text,
+        post_count -> Int4,
     }
 }
 

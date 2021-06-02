@@ -15,6 +15,7 @@ use rocket_multipart_form_data::{
 use rocket_auth::User;
 use serde_json::json;
 use std::env;
+use std::cmp::max;
 
 
 const PAGE_SIZE: usize = 10;
@@ -43,6 +44,10 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -
         page,
         &crate::establish_connection()
     );
+    let mut max_users = UsersAndPosts::post_count(&crate::establish_connection()) as usize;
+    if max_users < 1 {
+        max_users = 1;
+    }
     Template::render("posts/post_list", json!({
             "data": uap,
             "flash": match flash {
@@ -54,9 +59,9 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -
                 None => "".to_string()
             },
             "page": page,
-            "max_page": div_up(uap.len(), 10) - 1,
-            "start_page": std::cmp::max(page - 3, 0),
-            "end_page": std::cmp::min(div_up(uap.len(), 10) - 1, page + 3)
+            "max_page": div_up(max_users, PAGE_SIZE) - 1,
+            "start_page": if page < 4 {0} else {page - 3},
+            "end_page": std::cmp::min(div_up(max_users, PAGE_SIZE) - 1, page + 3)
         }))
 }
 

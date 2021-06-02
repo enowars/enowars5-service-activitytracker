@@ -41,7 +41,7 @@ impl From<(User, Vec<Post>)> for UsersAndPosts {
 }
 impl UsersAndPosts {
     pub fn load_all(email_id: i32, page_size: usize, page: usize, conn: &PgConnection) -> Vec<UsersAndPosts>{
-        let users: Vec<User> = users::table.order_by(users::id.desc()).limit(page_size as i64).offset((page*page_size) as i64).load::<User>(conn).expect("Error loading users").into_iter().collect();
+        let users: Vec<User> = users::table.filter(users::post_count.gt(0)).order_by(users::id.desc()).limit(page_size as i64).offset((page*page_size) as i64).load::<User>(conn).expect("Error loading users").into_iter().collect();
         let posts = Post::belonging_to(&users)
             .filter(posts::deleted.eq(false))
             .filter(posts::visibility.eq("public").or(posts::user_id.eq(email_id)))
@@ -59,17 +59,28 @@ impl UsersAndPosts {
             .grouped_by(&user);
         user.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>()
     }
+    pub fn post_count(conn: &PgConnection) -> i64 {
+        users::table
+            .filter(users::post_count.gt(0))
+            .select(count(users::id))
+            .first::<i64>(conn).expect("Error getting post count.")
+    }
 }
 
 pub fn create_post(conn: &PgConnection, body: &str, visibility: &str, image: Option<String>, user_id: i32) -> Post {
     let user_post_count = (posts::table
         .select(count(posts::id))
         .filter(posts::user_id.eq(user_id))
-        .first::<i64>(&crate::establish_connection()).expect("Error saving post.") + 1) as i32; // Trust me, this is safe!
+        .first::<i64>(conn).expect("Error saving post.") + 1) as i32; // Trust me, this is safe!
 
     let new_post = NewPost {
         body, visibility, image, user_id, user_post_count
     };
+
+    diesel::update(users::table.find(user_id))
+        .set(users::post_count.eq(user_post_count))
+        .get_result::<User>(conn)
+        .expect("Error updating user.");
 
     diesel::insert_into(posts::table)
         .values(&new_post)
@@ -89,10 +100,20 @@ pub fn update_post(conn: &PgConnection, id: i32, body: Option<&str>, visibility:
     };
     match visibility {
         Some(v) => {
-            diesel::update(dsl::posts.find(id))
+            let post = diesel::update(dsl::posts.find(id))
                 .set(dsl::visibility.eq(v))
                 .get_result::<Post>(conn)
                 .expect("Error updating post.");
+            let visible_post_count = (posts::table
+                .filter(posts::user_id.eq(post.user_id))
+                .filter(posts::visibility.eq("public"))
+                .filter(posts::deleted.eq(false))
+                .select(count(posts::id))
+                .first::<i64>(conn).expect("Error updating post.")) as i32;
+            diesel::update(users::table.find(post.user_id))
+                .set(users::post_count.eq(visible_post_count))
+                .get_result::<User>(conn)
+                .expect("Error updating user.");
             ()
         },
         None => ()
@@ -112,9 +133,20 @@ pub fn update_post(conn: &PgConnection, id: i32, body: Option<&str>, visibility:
 }
 
 pub fn delete_post(conn: &PgConnection, id: i32) -> usize {
-    diesel::update(dsl::posts.find(id))
+    let post = diesel::update(dsl::posts.find(id))
         .set(dsl::deleted.eq(true))
         .get_result::<Post>(conn)
         .expect("Error deleting post.");
+    let visible_post_count = (posts::table
+        .filter(posts::user_id.eq(post.user_id))
+        .filter(posts::visibility.eq("public"))
+        .filter(posts::deleted.eq(false))
+        .select(count(posts::id))
+        .first::<i64>(conn).expect("Error deleting post.")) as i32;
+
+    diesel::update(users::table.find(post.user_id))
+        .set(users::post_count.eq(visible_post_count))
+        .get_result::<User>(conn)
+        .expect("Error updating user.");
     1
 }

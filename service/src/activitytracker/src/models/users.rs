@@ -13,6 +13,7 @@ pub struct User {
     pub password: String,
     pub is_admin: bool,
     pub verification_image: String,
+    pub post_count: i32,
 }
 
 #[derive(Insertable)]

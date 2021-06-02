@@ -559,7 +559,7 @@ class ActivitytrackerChecker(BaseChecker):
                         image_upload_name = f"profiles/{email}.png"
                         self.http_post('/posts/insert', data={
                             "body": "???",
-                            "visibility": "public"
+                            "visibility": "private"
                         }, files={
                             "image": (image_upload_name, image)
                         })
