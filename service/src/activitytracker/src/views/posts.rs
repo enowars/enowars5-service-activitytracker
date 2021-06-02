@@ -44,7 +44,7 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -
         &crate::establish_connection()
     );
     Template::render("posts/post_list", json!({
-            "data": uap[std::cmp::min(page*10, uap.len())..std::cmp::min(page*10+10, uap.len())],
+            "data": uap,
             "flash": match flash {
                 Some(ref msg) => msg.msg(),
                 None => "List of activities"
@@ -55,7 +55,7 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -
             },
             "page": page,
             "max_page": div_up(uap.len(), 10) - 1,
-            "start_page": if page < 2 {0} else {page-3},
+            "start_page": std::cmp::max(page - 3, 0),
             "end_page": std::cmp::min(div_up(uap.len(), 10) - 1, page + 3)
         }))
 }
