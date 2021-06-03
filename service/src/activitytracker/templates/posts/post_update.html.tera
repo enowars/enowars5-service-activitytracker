@@ -32,15 +32,15 @@
                     <label for="image">Post visibility:</label>
                     <br>
                     <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="visibility" id="inlineRadio1" value="public">
+                        <input class="form-check-input" type="radio" name="visibility" id="inlineRadio1" value="public" {% if post[0].visibility == "public" %} checked {% endif %} >
                         <label class="form-check-label" for="inlineRadio1">Public</label>
                     </div>
                     <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="visibility" id="inlineRadio2" value="friends">
+                        <input class="form-check-input" type="radio" name="visibility" id="inlineRadio2" value="friends" {% if post[0].visibility == "friends" %} checked {% endif %}>
                         <label class="form-check-label" for="inlineRadio2">Friends</label>
                     </div>
                     <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="visibility" id="inlineRadio3" value="private">
+                        <input class="form-check-input" type="radio" name="visibility" id="inlineRadio3" value="private" {% if post[0].visibility == "private" %} checked {% endif %}>
                         <label class="form-check-label" for="inlineRadio3">Private</label>
                     </div>
                 </div>

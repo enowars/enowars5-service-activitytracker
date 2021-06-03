@@ -41,7 +41,6 @@ fn index() -> Redirect {
 /* Static files Handler */
 #[get("/imgs/<file..>")]
 fn assets(file: PathBuf) -> Option<NamedFile> {
-    println!("{}", file.to_str()?);
     if file.to_str()?.contains('\\') {
         return NamedFile::open(Path::new("imgs/default.jpg")).ok();
     }
@@ -57,8 +56,12 @@ fn assets(file: PathBuf) -> Option<NamedFile> {
 }
 
 fn main() {
-
-    let users = rocket_auth::Users::open_postgres("host=postgres user=diesel password='diesel'").unwrap();
+    dotenv().ok();
+    let users = rocket_auth::Users::open_postgres(format!("host={} user={} password='{}'",
+        env::var("DB_HOST").expect("DATABASE_URL must be set"),
+        env::var("DB_USER").expect("DATABASE_URL must be set"),
+        env::var("DB_PASS").expect("DATABASE_URL must be set")
+    ).as_str()).unwrap();
 
     rocket::ignite().mount("/", routes![
         index,

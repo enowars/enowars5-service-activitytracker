@@ -9,13 +9,10 @@ use rocket::response::{Flash, Redirect};
 
 use rocket::http::ContentType;
 use rocket::Data;
-use rocket_multipart_form_data::{
-    MultipartFormData, MultipartFormDataField, MultipartFormDataOptions,
-};
+use rocket_multipart_form_data::{MultipartFormData, MultipartFormDataField, MultipartFormDataOptions, FileField};
 use rocket_auth::User;
 use serde_json::json;
 use std::env;
-use std::cmp::max;
 
 
 const PAGE_SIZE: usize = 10;
@@ -35,16 +32,17 @@ fn div_up(a: usize, b: usize) -> usize {
 
 #[get("/posts/<page>")]
 pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -> Template {
-    let uap = UsersAndPosts::load_all(
-        match user {
+    let user_id = match user {
             Some(ref u) => u.id(),
             None => -1,
-        },
+        };
+    let uap = UsersAndPosts::load_all(
+        user_id,
         PAGE_SIZE,
         page,
         &crate::establish_connection()
     );
-    let mut max_users = UsersAndPosts::post_count(&crate::establish_connection()) as usize;
+    let mut max_users = UsersAndPosts::post_count(user_id, &crate::establish_connection()) as usize;
     if max_users < 1 {
         max_users = 1;
     }
@@ -68,7 +66,7 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -
 #[get("/posts/my")]
 pub fn my_posts(user: User, flash: Option<FlashMessage>) -> Template {
     let mut uap = UsersAndPosts::load_mine(user.id(),
-        &crate::establish_connection()
+                                           &crate::establish_connection()
     );
     uap.retain(|u| u.0.id == user.id());
 
@@ -101,8 +99,6 @@ pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
 
 #[post("/posts/insert", data = "<post_data>")]
 pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
-    use std::fs;
-
     /* Define the form */
     let mut options = MultipartFormDataOptions::new();
     options.allowed_fields = vec![
@@ -116,22 +112,7 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
 
     match multipart_form_data {
         Ok(form) => {
-            let image = match form.files.get("image") {
-                Some(img) => {
-                    let file_field = &img[0];
-                    let _content_type = &file_field.content_type;
-                    let _file_name = &file_field.file_name;
-                    let _path = &file_field.path;
-
-                    let _: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
-
-                    let absolute_path: String = format!("{}{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), _file_name.clone().unwrap());
-                    fs::copy(_path, &absolute_path).unwrap();
-
-                    Some(format!("imgs/{}", _file_name.clone().unwrap()))   // TODO: Potential Vulnerability - directory traversal?
-                }
-                None => None,
-            };
+            let image = handle_image(form.files.get("image"));
             /* Insert data into database */
             create_post(&crate::establish_connection(),
                         match form.texts.get("body") {
@@ -194,10 +175,39 @@ pub fn update(user: User, flash: Option<FlashMessage>, email: String, id: i32) -
         }))
 }
 
+
+fn handle_image(image: Option<&Vec<FileField>>) -> Option<String> {
+    use std::fs;
+    match image {
+        Some(img) => {
+            let file_field = &img[0];
+            let _content_type = &file_field.content_type;
+            let _file_name = &file_field.file_name;
+            let _path = &file_field.path;
+
+            let forbidden_chars = &"#%&{}\\<>*?/ $!'\":@+`|="[..]; // forbidden characters for filenames
+            if _file_name.as_ref().unwrap().as_str().contains("..") {   // prevent path traversal
+                return None;
+            } else if  _file_name.as_ref().unwrap().as_str().contains(forbidden_chars) {
+                return None;
+            }
+
+
+            let _: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
+
+            let absolute_path: String = format!("{}{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), _file_name.clone().unwrap());
+            fs::copy(_path, &absolute_path).unwrap();
+
+            Some(format!("imgs/{}", _file_name.clone().unwrap()))
+        }
+        None => None,
+    }
+}
+
+
 #[post("/posts/update", data = "<post_data>")]
 #[allow(unused_variables)] // variable user is needed for permissions handler
 pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
-    use std::fs;
 
     let mut options = MultipartFormDataOptions::new();
     options.allowed_fields = vec![
@@ -211,22 +221,7 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
 
     match multipart_form_data {
         Ok(form) => {
-            let image = match form.files.get("image") {
-                Some(img) => {
-                    let file_field = &img[0];
-                    let _content_type = &file_field.content_type;
-                    let _file_name = &file_field.file_name;
-                    let _path = &file_field.path;
-
-                    let _: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
-
-                    let absolute_path: String = format!("{}{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), _file_name.clone().unwrap());
-                    fs::copy(_path, &absolute_path).unwrap();
-
-                    Some(format!("imgs/{}", _file_name.clone().unwrap()))
-                }
-                None => None,
-            };
+            let image = handle_image(form.files.get("image"));
 
             update_post(&crate::establish_connection(),
                         form.texts.get("id").unwrap()[0]
