@@ -39,8 +39,9 @@ fn index() -> Redirect {
 }
 
 /* Static files Handler */
-#[get("/imgs/<file..>")]
+#[get("/posts/imgs/<file..>")]
 fn assets(file: PathBuf) -> Option<NamedFile> {
+    println!("{}", file.to_str()?);
     if file.to_str()?.contains('\\') {
         return NamedFile::open(Path::new("imgs/default.jpg")).ok();
     }

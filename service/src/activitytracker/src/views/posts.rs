@@ -33,9 +33,9 @@ fn div_up(a: usize, b: usize) -> usize {
 #[get("/posts/<page>")]
 pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -> Template {
     let user_id = match user {
-            Some(ref u) => u.id(),
-            None => -1,
-        };
+        Some(ref u) => u.id(),
+        None => -1,
+    };
     let uap = UsersAndPosts::load_all(
         user_id,
         PAGE_SIZE,
@@ -221,6 +221,17 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
 
     match multipart_form_data {
         Ok(form) => {
+            let id = form.texts.get("id").unwrap()[0]
+                .text
+                .parse::<i32>()
+                .unwrap();
+            let p = posts::table.filter(posts::id.eq(id)).first::<Post>(&crate::establish_connection()).expect("Error updating post.");
+            if p.user_id != user.id() {
+                return Flash::error(
+                    Redirect::to("/posts"),
+                    "You cannot update this post."
+                );
+            }
             let image = handle_image(form.files.get("image"));
 
             update_post(&crate::establish_connection(),
@@ -267,6 +278,12 @@ pub fn delete(user: User, email: String, id: i32) -> Flash<Redirect> {
         .filter(posts::user_id.eq(email_id))
         .filter(posts::user_post_count.eq(id))
         .first(&crate::establish_connection()).expect("No such activity!");
+    if post.user_id != user.id() {
+        return Flash::error(
+            Redirect::to("/posts"),
+            "Cannot delete post."
+        );
+    }
     delete_post(
         &crate::establish_connection(),
         post.id
