@@ -84,6 +84,26 @@ pub fn my_posts(user: User, flash: Option<FlashMessage>) -> Template {
         }))
 }
 
+#[get("/posts/friends")]
+pub fn friends_posts(user: User, flash: Option<FlashMessage>) -> Template {
+    let uap = UsersAndPosts::load_friends(user.id(),
+                                           &crate::establish_connection()
+    );
+
+    Template::render("posts/post_list", json!({
+            "data": uap,
+            "flash": match flash {
+                Some(ref msg) => msg.msg(),
+                None => "List of activities"
+            },
+            "user": user.email().to_string(),
+            "page": 0,
+            "max_page": 0,
+            "start_page": 0,
+            "end_page": 0
+        }))
+}
+
 #[get("/posts/new")]
 pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
     let (m_name, m_msg) = match flash {

@@ -17,6 +17,9 @@
         .w-8 { width: 80%; }
         .w-9 { width: 90%; }
         .w-10 { width: 100%; }
+        .div-inline{
+            display:inline-block;
+        }
     </style>
 </head>
 
@@ -32,6 +35,15 @@
                 {% if user %}
                     <a class="btn btn-danger btn-lg float-right mr-1" href="/auth/logout">Logout</a>
                     <a class="btn btn-lg float-right mr-1" href="/posts/my">Your Posts</a>
+                    <div class="dropdown div-inline float-right mr-1 btn-lg">
+                        <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            Friends
+                        </button>
+                        <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                            <a class="dropdown-item" href="/friends">Add a Friend</a>
+                            <a class="dropdown-item" href="/posts/friends">Friend's posts</a>
+                        </div>
+                    </div>
                 {% else %}
                     <a class="btn btn-primary btn-lg float-right mr-1" href="/auth/login">Login</a>
                     <a class="btn btn-primary btn-lg float-right mr-1" href="/auth/signup">Register</a>

@@ -1,0 +1,1 @@
+This will be a broken dependency for the rust project that will be pushed to crates.io, but it's not quite ready yet.

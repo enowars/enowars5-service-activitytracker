@@ -2,7 +2,7 @@
 
 {% block title %} Activities {% endblock %}
 
-{% block heading %} Log New Activity! {% endblock %}
+{% block heading %} Log! {% endblock %}
 
 {% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Get me out of here!</a> {% endblock %}
 

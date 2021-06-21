@@ -69,6 +69,7 @@ fn main() {
         views::posts::get_posts_redirect,
         views::posts::get_posts,
         views::posts::my_posts,
+        views::posts::friends_posts,
         views::posts::new,
         views::posts::insert,
         views::posts::update,
@@ -81,7 +82,9 @@ fn main() {
         views::auth::logout,
         views::auth::delete,
         views::auth::get_forgot,
-        views::auth::post_forgot
+        views::auth::post_forgot,
+        views::friends::new,
+        views::friends::insert
     ])
         .manage(users)
         .attach(Template::fairing())

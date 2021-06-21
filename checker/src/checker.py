@@ -187,19 +187,44 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
-                "body": f"I keep forgetting my passwords, but I discovered that they can be saved in a private post! So useful!",
+                "body": f"A friend of mine keeps posting their passwords! LOL!",
                 "visibility": "public"
-            })
-
-            self.http_post('/posts/insert', files={
-                "body": self.flag,
-                "visibility": "private"
             })
 
             self.generate_random_posts(random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password}, templates='simple')
             self.http_get('/posts/0')
+
+            self.http_get('/auth/logout')
+
+            original_email = email
+            firstname, lastname = barnum.create_name()
+            company = barnum.create_company_name()
+            jobtitle = barnum.create_job_title()
+            password = barnum.create_pw(length=10)
+            email = barnum.create_email(name=(firstname, lastname)).lower()
+
+            self.register_user(email, password)
+
+            self.generate_random_posts(random.randint(0, 3),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle}, templates='simple')
+
+
+            self.http_post('/posts/insert', files={
+                "body": self.flag,
+                "visibility": "friends"
+            })
+
+            self.generate_random_posts(random.randint(0, 3),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle}, templates='simple')
+
+
+            self.http_post('/friends/insert', files={
+                "email": original_email
+            })
 
             self.http_get('/auth/logout')
 
@@ -280,10 +305,15 @@ class ActivitytrackerChecker(BaseChecker):
             elif private == 0:
                 p = True
             self.http_get('/posts/new')
-            self.http_post('/posts/insert', files={
-                "body": random.choice(posts).format(**data) if data else random.choice(posts),
-                "visibility": "public" if p else "private"
-            })
+            while 1:
+                try:
+                    self.http_post('/posts/insert', files={
+                        "body": random.choice(posts).format(**data) if data else random.choice(posts),
+                        "visibility": "public" if p else "private"
+                    })
+                    break
+                except:
+                    pass
 
     def putnoise(self):  # type: () -> None
         """
@@ -467,8 +497,7 @@ class ActivitytrackerChecker(BaseChecker):
 
     pattern1 = re.compile("My boss (\\w+ \\w+) is great. .* Cheers, (\\w+ \\w+)")
     pattern2 = re.compile("by (.*@.*)")
-    pattern3 = re.compile("I keep forgetting my passwords, but I discovered that "
-                          "they can be saved in a private post! So useful!")
+    pattern3 = re.compile("A friend of mine keeps posting their passwords! LOL!")
 
     @staticmethod
     def guess_boss_email(email, name1, name2):
@@ -572,7 +601,7 @@ class ActivitytrackerChecker(BaseChecker):
                             "image": image
                         })
                     # get flag
-                    resp = self.http_get(f"/posts/my")
+                    resp = self.http_get(f"/posts/friends")
                     t = html.unescape(resp.text)
                     f = self.search_flag(t)
                     if f:

@@ -8,6 +8,7 @@ use crate::diesel::prelude::*;
 use serde::{Serialize};
 use crate::models::users::User;
 use diesel::expression::dsl::count;
+use crate::models::friends::get_all_friends;
 
 
 #[derive(Queryable, Serialize, Associations, Identifiable)]
@@ -41,10 +42,11 @@ impl From<(User, Vec<Post>)> for UsersAndPosts {
 }
 impl UsersAndPosts {
     pub fn load_all(email_id: i32, page_size: usize, page: usize, conn: &PgConnection) -> Vec<UsersAndPosts>{
-        let users: Vec<User> = users::table.filter(users::post_count.gt(0).or(users::id.eq(email_id))).order_by(users::id.desc()).limit(page_size as i64).offset((page*page_size) as i64).load::<User>(conn).expect("Error loading users").into_iter().collect();
+        let friends: Vec<i32> = get_all_friends(conn, email_id);
+        let users: Vec<User> = users::table.filter(users::post_count.gt(0).or(users::id.eq(email_id)).or(users::id.eq_any(&friends))).order_by(users::id.desc()).limit(page_size as i64).offset((page*page_size) as i64).load::<User>(conn).expect("Error loading users").into_iter().collect();
         let posts = Post::belonging_to(&users)
             .filter(posts::deleted.eq(false))
-            .filter(posts::visibility.eq("public").or(posts::user_id.eq(email_id)))
+            .filter(posts::visibility.eq("public").or(posts::user_id.eq(email_id)).or(posts::user_id.eq_any(&friends).and(posts::visibility.eq("friends"))))
             .load::<Post>(conn).expect("Error loading posts")
             .grouped_by(&users);
         let mut res = users.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>();
@@ -55,6 +57,16 @@ impl UsersAndPosts {
         let user: Vec<User> = users::table.filter(users::id.eq(email_id)).load::<User>(conn).expect("Error loading users").into_iter().collect();
         let posts = Post::belonging_to(&user)
             .filter(posts::deleted.eq(false))
+            .load::<Post>(conn).expect("Error loading posts")
+            .grouped_by(&user);
+        user.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>()
+    }
+    pub fn load_friends(email_id: i32, conn: &PgConnection) -> Vec<UsersAndPosts>{
+        let friends: Vec<i32> = get_all_friends(conn, email_id);
+        let user: Vec<User> = users::table.filter(users::id.eq_any(&friends)).load::<User>(conn).expect("Error loading users").into_iter().collect();
+        let posts = Post::belonging_to(&user)
+            .filter(posts::deleted.eq(false))
+            .filter(posts::visibility.eq("public").or(posts::user_id.eq(email_id)).or(posts::user_id.eq_any(&friends).and(posts::visibility.eq("friends"))))
             .load::<Post>(conn).expect("Error loading posts")
             .grouped_by(&user);
         user.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>()

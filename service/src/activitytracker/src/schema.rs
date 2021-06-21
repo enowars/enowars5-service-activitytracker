@@ -8,6 +8,14 @@ table! {
 }
 
 table! {
+    friends (id) {
+        id -> Int4,
+        sender_id -> Int4,
+        receiver_id -> Int4,
+    }
+}
+
+table! {
     posts (id) {
         id -> Int4,
         body -> Text,
@@ -34,6 +42,7 @@ joinable!(posts -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
     chats,
+    friends,
     posts,
     users,
 );
