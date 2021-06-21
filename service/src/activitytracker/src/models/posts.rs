@@ -20,7 +20,8 @@ pub struct Post {
     pub visibility: String,
     pub image: Option<String>,
     pub user_id: i32,
-    pub user_post_count: i32
+    pub user_post_count: i32,
+    pub protected: bool,
 }
 
 #[derive(Insertable, AsChangeset)]
@@ -30,7 +31,8 @@ pub struct NewPost<'a> {
     pub visibility: &'a str,
     pub image: Option<String>,
     pub user_id: i32,
-    pub user_post_count: i32
+    pub user_post_count: i32,
+    pub protected: bool,
 }
 
 #[derive(Serialize)]
@@ -93,14 +95,14 @@ pub fn update_visible_post_count(user_id: i32, conn: &PgConnection) {
         .expect("Error updating user.");
 }
 
-pub fn create_post(conn: &PgConnection, body: &str, visibility: &str, image: Option<String>, user_id: i32) -> Post {
+pub fn create_post(conn: &PgConnection, body: &str, visibility: &str, image: Option<String>, user_id: i32, protected: bool) -> Post {
     let user_post_count = (posts::table
         .select(count(posts::id))
         .filter(posts::user_id.eq(user_id))
         .first::<i64>(conn).expect("Error saving post.") + 1) as i32; // Trust me, this is safe!
 
     let new_post = NewPost {
-        body, visibility, image, user_id, user_post_count
+        body, visibility, image, user_id, user_post_count, protected
     };
 
 

@@ -146,7 +146,8 @@ class ActivitytrackerChecker(BaseChecker):
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": f"I love working here at {company} as a {jobtitle}. My boss {boss_firstname} {boss_lastname} is great, and I'll get a promotion soon! Come work here as well! Cheers, {firstname} {lastname}",
-                "visibility": "public"
+                "visibility": "public",
+                "protected": "true"
             })
 
             self.generate_random_posts(random.randint(0, 3),
@@ -160,7 +161,8 @@ class ActivitytrackerChecker(BaseChecker):
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": self.flag,
-                "visibility": "private"
+                "visibility": "private",
+                "protected": "true"
             })
 
             # Save the generated values for the associated getflag() call.
@@ -188,7 +190,8 @@ class ActivitytrackerChecker(BaseChecker):
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": f"A friend of mine keeps posting their passwords! LOL!",
-                "visibility": "public"
+                "visibility": "public",
+                "protected": "true"
             })
 
             self.generate_random_posts(random.randint(0, 3),
@@ -214,7 +217,8 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.http_post('/posts/insert', files={
                 "body": self.flag,
-                "visibility": "friends"
+                "visibility": "friends",
+                "protected": "true"
             })
 
             self.generate_random_posts(random.randint(0, 3),
@@ -309,7 +313,8 @@ class ActivitytrackerChecker(BaseChecker):
                 try:
                     self.http_post('/posts/insert', files={
                         "body": random.choice(posts).format(**data) if data else random.choice(posts),
-                        "visibility": "public" if p else "private"
+                        "visibility": "public" if p else "private",
+                        "protected": "true" if random.random() < 0.1 else "false"
                     })
                     break
                 except:
@@ -344,7 +349,8 @@ class ActivitytrackerChecker(BaseChecker):
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": text,
-                "visibility": "public" if self.variant_id == 0 else "private"
+                "visibility": "public" if self.variant_id == 0 else "private",
+                "protected": "true"
             })
             self.generate_random_posts(n=random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
@@ -434,7 +440,8 @@ class ActivitytrackerChecker(BaseChecker):
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": text,
-                "visibility": "public" if self.variant_id == 0 else "private"
+                "visibility": "public" if self.variant_id == 0 else "private",
+                "protected": "false"
             })
             resp = self.check_pages(text)
             t = resp.split("\">Edit</a>")[0]
@@ -456,7 +463,8 @@ class ActivitytrackerChecker(BaseChecker):
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": random_validation_text,
-                "visibility": "public"
+                "visibility": "public",
+                "protected": "false"
             })
             resp = html.unescape(self.http_get('/posts/my').text)
             assert_in(random_validation_text, resp)
@@ -588,7 +596,8 @@ class ActivitytrackerChecker(BaseChecker):
                         image_upload_name = f"profiles/{email}.png"
                         self.http_post('/posts/insert', data={
                             "body": "???",
-                            "visibility": "private"
+                            "visibility": "private",
+                            "protected": "false"
                         }, files={
                             "image": (image_upload_name, image)
                         })

@@ -87,7 +87,7 @@ pub fn my_posts(user: User, flash: Option<FlashMessage>) -> Template {
 #[get("/posts/friends")]
 pub fn friends_posts(user: User, flash: Option<FlashMessage>) -> Template {
     let uap = UsersAndPosts::load_friends(user.id(),
-                                           &crate::establish_connection()
+                                          &crate::establish_connection()
     );
 
     Template::render("posts/post_list", json!({
@@ -124,6 +124,7 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
     options.allowed_fields = vec![
         MultipartFormDataField::text("body"),
         MultipartFormDataField::text("visibility"),
+        MultipartFormDataField::text("protected"),
         MultipartFormDataField::file("image"),
     ];
 
@@ -144,7 +145,11 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
                             None => "private",
                         },
                         image,
-                        user.id()
+                        user.id(),
+                        match form.texts.get("protected") {
+                            Some(value) => value[0].text.as_str() == "true",
+                            None => false
+                        }
             );
 
             Flash::success(
@@ -246,6 +251,12 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
                 .parse::<i32>()
                 .unwrap();
             let p = posts::table.filter(posts::id.eq(id)).first::<Post>(&crate::establish_connection()).expect("Error updating post.");
+            if p.protected {
+                return Flash::error(
+                    Redirect::to("/posts"),
+                    "This post is protected and cannot be updated."
+                );
+            }
             if p.user_id != user.id() {
                 return Flash::error(
                     Redirect::to("/posts"),
@@ -298,6 +309,12 @@ pub fn delete(user: User, email: String, id: i32) -> Flash<Redirect> {
         .filter(posts::user_id.eq(email_id))
         .filter(posts::user_post_count.eq(id))
         .first(&crate::establish_connection()).expect("No such activity!");
+    if post.protected {
+        return Flash::error(
+            Redirect::to("/posts"),
+            "This post is protected and cannot be deleted."
+        );
+    }
     if post.user_id != user.id() {
         return Flash::error(
             Redirect::to("/posts"),

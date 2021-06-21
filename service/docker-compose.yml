@@ -12,8 +12,8 @@ services:
     volumes:
       - ./data/:/data:rw
     command: postgres -c listen_addresses='*'
-#    ports:
-#      - 5469:5432
+    ports:
+      - 5469:5432
 
   activitytracker:
     build: .

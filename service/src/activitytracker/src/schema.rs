@@ -24,6 +24,7 @@ table! {
         image -> Nullable<Text>,
         user_id -> Int4,
         user_post_count -> Int4,
+        protected -> Bool,
     }
 }
 
