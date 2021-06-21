@@ -280,6 +280,27 @@ class ActivitytrackerChecker(BaseChecker):
         else:
             raise EnoException("Wrong variant_id provided")
 
+
+    def generate_workout(self):
+        ex = [
+            "Pushup",
+            "Pullup",
+            "Chinup",
+            "Burpee",
+            "Plank",
+            "Squats",
+            "Run",
+            "Jump",
+            "Lunges",
+            "Crunches",
+            "Rows"
+        ]
+        w = []
+        for i in range(random.randint(5, 15)):
+            w.append(random.choice(ex) + " x " + str(random.randint(5, 50)))
+        return "Today's workout: " + ", ".join(w)
+
+
     def generate_random_posts(self, n=1, templates="any", data=None, private=2):
         """
         Creates n posts using the defined templates. private=0: public, 1: private, 2: random
@@ -311,8 +332,12 @@ class ActivitytrackerChecker(BaseChecker):
             self.http_get('/posts/new')
             while 1:
                 try:
+                    if random.random() < 0.3:
+                        body = random.choice(posts).format(**data) if data else random.choice(posts)
+                    else:
+                        body = self.generate_workout()
                     self.http_post('/posts/insert', files={
-                        "body": random.choice(posts).format(**data) if data else random.choice(posts),
+                        "body": body,
                         "visibility": "public" if p else "private",
                         "protected": "true" if random.random() < 0.1 else "false"
                     })

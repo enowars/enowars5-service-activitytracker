@@ -6,6 +6,7 @@ version = 3
 name = "activitytracker"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "diesel",
  "dotenv",
  "file_diff",

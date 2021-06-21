@@ -6,9 +6,14 @@ RUN rustup default nightly-2021-05-20
 
 # Create our mapped data volume endpoint
 RUN mkdir /data/
+RUN mkdir /data/imgs
+
+COPY ./src/activitytracker/imgs/background.svg /data/imgs/background.svg
+COPY ./src/activitytracker/imgs/default.jpg /data/imgs/default.jpg
 
 # Change the working directory.
 WORKDIR /service/
+
 # Expose the service's port
 EXPOSE 8000
 
@@ -27,6 +32,7 @@ RUN cargo build --release
 # Copy our service
 COPY ./src/activitytracker/ /service/
 RUN touch /service/src/main.rs
+
 
 #RUN diesel setup
 #RUN diesel migration run

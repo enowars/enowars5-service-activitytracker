@@ -7,6 +7,12 @@
 {% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Back!</a> {% endblock %}
 
 {% block content %}
+    <div style="background-color: white; font-size: large">
+        Sign up for the amazing <span class="blink_text">ACTIVITY TRACKER</span>!!!
+        <br>
+        Upload your workouts, activities, and whatever else is on your mind, and share it with your friends! Live a healthy lifestyle!
+    </div>
+    <br>
     <form enctype="multipart/form-data" action="/auth/signup" method="post">
         <div class="form-group">
             <label for="email"><b>Email</b></label>
