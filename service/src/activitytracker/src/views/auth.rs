@@ -173,10 +173,11 @@ pub fn get_viewimages(user: User, flash: Option<FlashMessage>) -> Template {
 
 
 #[get("/auth/addimage")]
-pub fn get_addimage(flash: Option<FlashMessage>) -> Template {
+pub fn get_addimage(user: User, flash: Option<FlashMessage>) -> Template {
     if let Some(ref msg) = flash {
         Template::render("auth/addimage", json!({
-            "flash": msg.msg()
+            "flash": msg.msg(),
+            "user": user.email().to_string()
         }))
     } else {
         Template::render("auth/addimage", json!({}))
@@ -215,7 +216,7 @@ pub fn post_addimage(user: User, content_type: &ContentType, post_data: Data) ->
                 None => None,
             };
             Flash::success(
-                Redirect::to("/auth/gallery"),
+                Redirect::to("/auth/viewimages"),
                 "Added new image!",
             )
         }
