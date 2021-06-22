@@ -180,7 +180,7 @@ pub fn get_addimage(user: User, flash: Option<FlashMessage>) -> Template {
             "user": user.email().to_string()
         }))
     } else {
-        Template::render("auth/addimage", json!({}))
+        Template::render("auth/addimage", json!({"user": user.email().to_string()}))
     }
 }
 
