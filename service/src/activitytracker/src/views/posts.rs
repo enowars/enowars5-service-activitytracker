@@ -1,6 +1,7 @@
 use diesel::prelude::*;
 use crate::schema::*;
 use crate::models::posts::*;
+use crate::dbpool;
 
 use rocket_contrib::templates::Template;
 
@@ -13,6 +14,7 @@ use rocket_multipart_form_data::{MultipartFormData, MultipartFormDataField, Mult
 use rocket_auth::User;
 use serde_json::json;
 use std::env;
+use crate::models::users::delete_old_users;
 
 
 const PAGE_SIZE: usize = 10;
@@ -31,7 +33,7 @@ fn div_up(a: usize, b: usize) -> usize {
 
 
 #[get("/posts/<page>")]
-pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -> Template {
+pub fn get_posts(user: Option<User>, conn: dbpool::DbConn, flash: Option<FlashMessage>, page: usize) -> Template {
     let user_id = match user {
         Some(ref u) => u.id(),
         None => -1,
@@ -40,9 +42,9 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -
         user_id,
         PAGE_SIZE,
         page,
-        &crate::establish_connection()
+        &*conn
     );
-    let mut max_users = UsersAndPosts::post_count(user_id, &crate::establish_connection()) as usize;
+    let mut max_users = UsersAndPosts::post_count(user_id, &*conn) as usize;
     if max_users < 1 {
         max_users = 1;
     }
@@ -64,9 +66,9 @@ pub fn get_posts(user: Option<User>, flash: Option<FlashMessage>, page: usize) -
 }
 
 #[get("/posts/my")]
-pub fn my_posts(user: User, flash: Option<FlashMessage>) -> Template {
+pub fn my_posts(user: User, conn: dbpool::DbConn, flash: Option<FlashMessage>) -> Template {
     let mut uap = UsersAndPosts::load_mine(user.id(),
-                                           &crate::establish_connection()
+                                           &*conn
     );
     uap.retain(|u| u.0.id == user.id());
 
@@ -85,9 +87,9 @@ pub fn my_posts(user: User, flash: Option<FlashMessage>) -> Template {
 }
 
 #[get("/posts/friends")]
-pub fn friends_posts(user: User, flash: Option<FlashMessage>) -> Template {
+pub fn friends_posts(user: User, conn: dbpool::DbConn, flash: Option<FlashMessage>) -> Template {
     let uap = UsersAndPosts::load_friends(user.id(),
-                                          &crate::establish_connection()
+                                          &*conn
     );
 
     Template::render("posts/post_list", json!({
@@ -118,7 +120,7 @@ pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
 }
 
 #[post("/posts/insert", data = "<post_data>")]
-pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
+pub fn insert(user: User, conn: dbpool::DbConn, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
     /* Define the form */
     let mut options = MultipartFormDataOptions::new();
     options.allowed_fields = vec![
@@ -135,7 +137,7 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
         Ok(form) => {
             let image = handle_image(form.files.get("image"));
             /* Insert data into database */
-            create_post(&crate::establish_connection(),
+            create_post(&*conn,
                         match form.texts.get("body") {
                             Some(value) => &value[0].text,
                             None => "",
@@ -172,17 +174,17 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
 
 
 #[get("/posts/update/<email>/<id>")]
-pub fn update(user: User, flash: Option<FlashMessage>, email: String, id: i32) -> Template {
+pub fn update(user: User, conn: dbpool::DbConn, flash: Option<FlashMessage>, email: String, id: i32) -> Template {
     /* checks whether the user has rights to edit the post */
     let email_id: i32 = users::table
         .select(users::id)
         .filter(users::email.eq(email))
-        .first(&crate::establish_connection()).expect("No such user!");
+        .first(&*conn).expect("No such user!");
     let post_data = posts::table
         .select(posts::all_columns)
         .filter(posts::user_post_count.eq(id))
         .filter(posts::user_id.eq(email_id))
-        .load::<Post>(&crate::establish_connection());
+        .load::<Post>(&*conn);
 
     let (post, err) = match post_data {
         Ok(post) => (post, "".to_string()),
@@ -232,7 +234,7 @@ fn handle_image(image: Option<&Vec<FileField>>) -> Option<String> {
 
 #[post("/posts/update", data = "<post_data>")]
 #[allow(unused_variables)] // variable user is needed for permissions handler
-pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
+pub fn process_update(user: User, conn: dbpool::DbConn, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
 
     let mut options = MultipartFormDataOptions::new();
     options.allowed_fields = vec![
@@ -250,7 +252,7 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
                 .text
                 .parse::<i32>()
                 .unwrap();
-            let p = posts::table.filter(posts::id.eq(id)).first::<Post>(&crate::establish_connection()).expect("Error updating post.");
+            let p = posts::table.filter(posts::id.eq(id)).first::<Post>(&*conn).expect("Error updating post.");
             if p.protected {
                 return Flash::error(
                     Redirect::to("/posts"),
@@ -265,7 +267,7 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
             }
             let image = handle_image(form.files.get("image"));
 
-            update_post(&crate::establish_connection(),
+            update_post(&*conn,
                         form.texts.get("id").unwrap()[0]
                             .text
                             .parse::<i32>()
@@ -300,15 +302,15 @@ pub fn process_update(user: User, content_type: &ContentType, post_data: Data) -
 
 #[get("/posts/delete/<email>/<id>")]
 #[allow(unused_variables)] // variable user is needed for permissions handler
-pub fn delete(user: User, email: String, id: i32) -> Flash<Redirect> {
+pub fn delete(user: User, conn: dbpool::DbConn, email: String, id: i32) -> Flash<Redirect> {
     let email_id: i32 = users::table
         .select(users::id)
         .filter(users::email.eq(email))
-        .first(&crate::establish_connection()).expect("No such user!");
+        .first(&*conn).expect("No such user!");
     let post: Post = posts::table
         .filter(posts::user_id.eq(email_id))
         .filter(posts::user_post_count.eq(id))
-        .first(&crate::establish_connection()).expect("No such activity!");
+        .first(&*conn).expect("No such activity!");
     if post.protected {
         return Flash::error(
             Redirect::to("/posts"),
@@ -322,8 +324,15 @@ pub fn delete(user: User, email: String, id: i32) -> Flash<Redirect> {
         );
     }
     delete_post(
-        &crate::establish_connection(),
+        &*conn,
         post.id
     );
     Flash::success(Redirect::to("/posts"), "The activity was deleted.")
+}
+
+// Clean up every once in a while
+#[get("/posts/delete_old")]
+pub fn delete_old(conn: dbpool::DbConn) -> Flash<Redirect> {
+    delete_old_users(&*conn);
+    Flash::success(Redirect::to("/posts"), "Old stuff deleted.")
 }

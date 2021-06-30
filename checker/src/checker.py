@@ -35,7 +35,7 @@ class ActivitytrackerChecker(BaseChecker):
     # EDIT YOUR CHECKER PARAMETERS
     flag_variants = 3
     noise_variants = 2
-    havoc_variants = 2
+    havoc_variants = 3
     exploit_variants = 3
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
@@ -164,6 +164,7 @@ class ActivitytrackerChecker(BaseChecker):
                 "visibility": "private",
                 "protected": "true"
             })
+            self.http_get('/auth/logout')
 
             # Save the generated values for the associated getflag() call.
             self.chain_db = {
@@ -203,6 +204,13 @@ class ActivitytrackerChecker(BaseChecker):
 
             original_email = email
             firstname, lastname = barnum.create_name()
+            checker_email = barnum.create_email(name=(firstname, lastname)).lower()
+            checker_password = barnum.create_pw(length=10)
+
+            self.register_user(checker_email, checker_password)
+            self.http_get('/auth/logout')
+
+            firstname, lastname = barnum.create_name()
             company = barnum.create_company_name()
             jobtitle = barnum.create_job_title()
             password = barnum.create_pw(length=10)
@@ -210,32 +218,25 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.generate_random_posts(random.randint(0, 3),
-                                       data={"firstname": firstname, "lastname": lastname, "company": company,
-                                             "jobtitle": jobtitle}, templates='simple')
-
-
             self.http_post('/posts/insert', files={
                 "body": self.flag,
                 "visibility": "friends",
                 "protected": "true"
             })
 
-            self.generate_random_posts(random.randint(0, 3),
-                                       data={"firstname": firstname, "lastname": lastname, "company": company,
-                                             "jobtitle": jobtitle}, templates='simple')
-
-
             self.http_post('/friends/insert', files={
                 "email": original_email
+            })
+            self.http_post('/friends/insert', files={
+                "email": checker_email
             })
 
             self.http_get('/auth/logout')
 
             # Save the generated values for the associated getflag() call.
             self.chain_db = {
-                "username": email,
-                "password": password,
+                "username": checker_email,
+                "password": checker_password,
             }
         elif self.variant_id == 2:
             # First we need to register a user
@@ -301,6 +302,16 @@ class ActivitytrackerChecker(BaseChecker):
                 return t
             page += 1
 
+    def check_mine(self):
+        resp = self.http_get(f"/posts/my")
+        t = html.unescape(resp.text)
+        return t
+
+    def check_friends(self):
+        resp = self.http_get(f"/posts/friends")
+        t = html.unescape(resp.text)
+        return t
+
     def getflag(self):  # type: () -> None
         """
         This method retrieves a flag from the service.
@@ -323,7 +334,12 @@ class ActivitytrackerChecker(BaseChecker):
             self.login_user(username, password)
 
             # Let´s obtain our note.
-            resp = self.check_pages(self.flag)
+            if self.variant_id == 1:
+                resp = self.check_friends()
+            else:
+                resp = self.check_mine()
+
+            self.http_get('/auth/logout')
             assert_in(
                 self.flag, resp, "Resulting flag was found to be incorrect"
             )
@@ -432,6 +448,7 @@ class ActivitytrackerChecker(BaseChecker):
                                              "jobtitle": jobtitle, "password": password}, templates="simple")
             self.http_get('/posts/0')
 
+            self.http_get('/auth/logout')
             self.chain_db = {
                 "username": email,
                 "password": password,
@@ -464,11 +481,13 @@ class ActivitytrackerChecker(BaseChecker):
 
             # Let´s obtain our note.
             resp = self.check_pages(text)
+
+            self.http_get('/auth/logout')
             assert_in(
                 text, resp, "Resulting flag was found to be incorrect"
             )
             assert_in(
-                username, resp, "Resulting flag was found to be incorrect"
+                username, resp, "Posts don't contain correct usernames"
             )
         elif self.variant_id == 1:
             # private post
@@ -483,7 +502,9 @@ class ActivitytrackerChecker(BaseChecker):
             self.login_user(username, password)
 
             # Let´s obtain our note.
-            resp = self.check_pages(text)
+            resp = self.check_mine()
+
+            self.http_get('/auth/logout')
             assert_in(
                 text, resp, "Resulting flag was found to be incorrect"
             )
@@ -518,11 +539,12 @@ class ActivitytrackerChecker(BaseChecker):
                 "visibility": "public" if self.variant_id == 0 else "private",
                 "protected": "false"
             })
-            resp = self.check_pages(text)
+            resp = self.check_mine()
             t = resp.split("\">Edit</a>")[0]
             url = t.split("href=\"")[-1]
 
             resp = self.http_get(url)
+            self.http_get('/auth/logout')
             assert_in(text, html.unescape(resp.text))
         elif self.variant_id == 1:
             # check delete functionality
@@ -547,11 +569,17 @@ class ActivitytrackerChecker(BaseChecker):
             url = t.split("href=\"")[-1]
             self.http_get(url)
             resp = html.unescape(self.http_get('/posts/my').text)
+            self.http_get('/auth/logout')
             if random_validation_text in resp:
                 raise BrokenServiceException(
                     "Received unexpected response.",
                     internal_message=f"{random_validation_text} is in {resp}",
                 )
+        elif self.variant_id == 2:
+            try:
+                self.http_get('/posts/delete_old')
+            except Exception as e:
+                pass
         # TODO: check file upload
         else:
             raise EnoException("Wrong variant_id provided")

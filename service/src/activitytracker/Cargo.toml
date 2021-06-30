@@ -12,7 +12,7 @@ hyper = { git = 'https://github.com/strohel/hyper', branch = '0.10.x' }
 
 [dependencies]
 rocket = "0.4.7"
-diesel = { version = "1.4.4", features = ["postgres"] }
+diesel = { version = "1.4.4", features = ["postgres", "r2d2"] }
 dotenv = "0.15.0"
 serde = { version = "1.0.125", features = ["derive"] }
 rocket-multipart-form-data = "0.9.6"
@@ -21,6 +21,7 @@ file_diff = "1.0.0"
 rust-argon2 = "0.8.3"
 rand = "0.8.3"
 chrono = "0.4.19"
+r2d2 = "0.8.9"
 
 [dependencies.rocket_contrib]
 version = "0.4.7"

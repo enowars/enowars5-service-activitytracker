@@ -16,6 +16,7 @@ use std::env;
 use file_diff::{diff};
 use argon2::{self};
 use chrono::{Datelike, Utc};
+use crate::dbpool;
 
 
 use rand::random;
@@ -69,7 +70,7 @@ pub fn get_signup(flash: Option<FlashMessage>) -> Template {
 }
 
 #[post("/auth/signup", data = "<post_data>")]
-pub fn post_signup(mut auth: Auth, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
+pub fn post_signup(mut auth: Auth, conn: dbpool::DbConn, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
     use std::fs;
     let mut options = MultipartFormDataOptions::new();
     options.allowed_fields = vec![
@@ -115,7 +116,7 @@ pub fn post_signup(mut auth: Auth, content_type: &ContentType, post_data: Data) 
             };
             match image {
                 Some(path) => {
-                    update_user_image(&crate::establish_connection(), email, path.as_str());
+                    update_user_image(&*conn, email, path.as_str());
                 },
                 None => ()
             };
@@ -245,7 +246,7 @@ pub fn get_forgot(flash: Option<FlashMessage>) -> Template {
 }
 
 #[post("/auth/forgot", data = "<post_data>")]
-pub fn post_forgot(mut auth: Auth, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
+pub fn post_forgot(mut auth: Auth, conn: dbpool::DbConn, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
     use std::fs;
     let mut options = MultipartFormDataOptions::new();
     options.allowed_fields = vec![
@@ -258,7 +259,7 @@ pub fn post_forgot(mut auth: Auth, content_type: &ContentType, post_data: Data) 
         Ok(form_data) => {
             let email = match form_data.texts.get("email") {Some(value) => value[0].text.as_str(), None => ""};
             let password= match form_data.texts.get("password") {Some(value) => value[0].text.as_str(), None => ""};
-            let user_id = get_user_id(&crate::establish_connection(), email);
+            let user_id = get_user_id(&*conn, email);
             let upload_image = match form_data.files.get("image") {
                 Some(img) => {
                     let file_field = &img[0];
@@ -267,7 +268,7 @@ pub fn post_forgot(mut auth: Auth, content_type: &ContentType, post_data: Data) 
                 }
                 None => None,
             }.unwrap();
-            let user_image = get_user_image(&crate::establish_connection(), email);
+            let user_image = get_user_image(&*conn, email);
 
             let mut matching_image_found = false;
             let paths = fs::read_dir(format!("{}profiles", env::var("DATA_DIR").unwrap_or("/".to_string()))).unwrap();
@@ -286,7 +287,7 @@ pub fn post_forgot(mut auth: Auth, content_type: &ContentType, post_data: Data) 
                 let salt = rand_string(10);
                 let config = argon2::Config::default();
                 let hash = argon2::hash_encoded(password_bytes, &salt.as_bytes(), &config).unwrap();
-                update_user(&crate::establish_connection(), user_id, hash.as_str());
+                update_user(&*conn, user_id, hash.as_str());
                 let form: Signup = serde_json::from_str(format!("{{\"email\": \"{}\", \"password\": \"{}\"}}", email, password).as_str()).unwrap();
                 match auth.login(&form.into()) {
                     Err(e) => return Flash::error(

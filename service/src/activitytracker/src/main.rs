@@ -4,6 +4,7 @@
 pub mod schema;
 pub mod models;
 pub mod views;
+pub mod dbpool;
 
 #[macro_use]
 extern crate rocket;
@@ -16,21 +17,24 @@ use std::path::{Path, PathBuf};
 use rocket::response::NamedFile;
 
 
-use diesel::prelude::*;
-use diesel::pg::PgConnection;
 use dotenv::dotenv;
 use std::env;
 use rocket::response::Redirect;
 use rocket_auth::User;
 
 
-pub fn establish_connection() -> PgConnection {
+pub fn establish_connection_pool() -> dbpool::Pool {
     dotenv().ok();
 
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
-    PgConnection::establish(&database_url)
-        .expect(&format!("Error connecting to {}", database_url))
+    let config = dbpool::DbConfig{
+        host: env::var("DB_HOST").expect("DATABASE_URL must be set"),
+        port: 5432,
+        user: env::var("DB_USER").expect("DATABASE_URL must be set"),
+        password: env::var("DB_PASS").expect("DATABASE_URL must be set"),
+        database: env::var("DB_NAME").expect("DATABASE_URL must be set")
+    };
+
+    dbpool::init_pool(config)
 }
 
 
@@ -85,6 +89,8 @@ fn main() {
                                                           env::var("DB_PASS").expect("DATABASE_URL must be set")
     ).as_str()).unwrap();
 
+    let pool = establish_connection_pool();
+
     rocket::ignite().mount("/", routes![
         index,
         assets,
@@ -98,6 +104,7 @@ fn main() {
         views::posts::update,
         views::posts::process_update,
         views::posts::delete,
+        views::posts::delete_old,
         views::auth::get_login,
         views::auth::post_login,
         views::auth::get_signup,
@@ -113,6 +120,7 @@ fn main() {
         views::friends::insert
     ])
         .manage(users)
+        .manage(pool)
         .attach(Template::fairing())
         .launch();
 }

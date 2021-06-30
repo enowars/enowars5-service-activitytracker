@@ -10,6 +10,7 @@ use rocket_auth::User;
 use serde_json::json;
 use crate::models::users::get_user_id;
 use crate::models::friends::create_friend;
+use crate::dbpool;
 
 
 #[get("/friends")]
@@ -26,7 +27,7 @@ pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
 }
 
 #[post("/friends/insert", data = "<post_data>")]
-pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
+pub fn insert(user: User, conn: dbpool::DbConn, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
     /* Define the form */
     let mut options = MultipartFormDataOptions::new();
     options.allowed_fields = vec![
@@ -38,8 +39,8 @@ pub fn insert(user: User, content_type: &ContentType, post_data: Data) -> Flash<
 
     match multipart_form_data {
         Ok(form) => {
-            let other = get_user_id(&crate::establish_connection(), form.texts.get("email").unwrap()[0].text.as_str());
-            create_friend(&crate::establish_connection(), user.id(), other);
+            let other = get_user_id(&*conn, form.texts.get("email").unwrap()[0].text.as_str());
+            create_friend(&*conn, user.id(), other);
 
             Flash::success(
                 Redirect::to("/posts"),

@@ -37,7 +37,7 @@ RUN touch /service/src/main.rs
 #RUN diesel setup
 #RUN diesel migration run
 
-RUN cargo build --release
+RUN ROCKET_ENV=production cargo build --release
 
 COPY entrypoint.sh /
 RUN chmod +x /entrypoint.sh

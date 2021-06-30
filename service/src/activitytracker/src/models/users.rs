@@ -4,6 +4,7 @@ use crate::diesel::RunQueryDsl;
 use crate::models::users::users::dsl as dsl;
 use crate::diesel::prelude::*;
 use serde::{Serialize};
+use std::env;
 
 
 #[derive(Queryable, Identifiable, Serialize)]
@@ -14,6 +15,7 @@ pub struct User {
     pub is_admin: bool,
     pub verification_image: String,
     pub post_count: i32,
+    pub created: std::time::SystemTime,
 }
 
 #[derive(Insertable)]
@@ -34,6 +36,30 @@ pub fn create_user(conn: &PgConnection, email: &str, password: &str, is_admin: b
         .values(&new_user)
         .get_result(conn)
         .expect("Error creating user.")
+}
+
+pub fn delete_old_users(conn: &PgConnection) {
+    use std::fs;
+    let timestamp = std::time::SystemTime::now() - std::time::Duration::from_secs(60*10);
+    let query = users::table
+        .filter(dsl::created.lt(timestamp));
+    let user_list: Vec<String> = query
+        .select(dsl::email)
+        .load::<String>(conn).expect("Error loading users")
+        .into_iter()
+        .collect();
+    let paths = fs::read_dir(format!("{}profiles", env::var("DATA_DIR").unwrap_or("/".to_string()))).unwrap();
+    for path in paths {
+        let p = path.unwrap().path().display().to_string();
+        for user in &user_list {
+            let prefix = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("/".to_string()), user);
+            if p.starts_with(prefix.as_str()) {
+                fs::remove_file(&p).expect("Error deleting files");
+                break;
+            }
+        }
+    }
+    diesel::delete(query).execute(conn).expect("Error deleting users");
 }
 
 pub fn get_user_id(conn: &PgConnection, email: &str) -> i32 {
