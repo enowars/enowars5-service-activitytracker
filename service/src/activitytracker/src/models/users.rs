@@ -54,7 +54,7 @@ pub fn delete_old_users(conn: &PgConnection) {
         for user in &user_list {
             let prefix = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("/".to_string()), user);
             if p.starts_with(prefix.as_str()) {
-                fs::remove_file(&p).expect("Error deleting files");
+                fs::remove_file(&p);
                 break;
             }
         }

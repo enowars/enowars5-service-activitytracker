@@ -482,7 +482,6 @@ class ActivitytrackerChecker(BaseChecker):
             # Let´s obtain our note.
             resp = self.check_pages(text)
 
-            self.http_get('/auth/logout')
             assert_in(
                 text, resp, "Resulting flag was found to be incorrect"
             )
