@@ -2,11 +2,13 @@ use diesel::pg::PgConnection;
 use r2d2;
 use diesel::r2d2::ConnectionManager;
 use rocket::http::Status;
-use rocket::request::{self, FromRequest};
-use rocket::{Outcome, Request, State};
+use rocket::request::{FromRequest, Outcome, Request};
+use rocket::State;
 use std::ops::Deref;
 use serde::{Serialize, Deserialize};
 use std::fmt;
+use std::sync::Arc;
+use scheduled_thread_pool;
 
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -29,20 +31,30 @@ pub type Pool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
 pub fn init_pool(config: DbConfig) -> Pool {
     let manager = ConnectionManager::<PgConnection>::new(config.to_string());
-    r2d2::Pool::new(manager).expect("Could not create db pool")
+    r2d2::Pool::builder()
+        .max_size(1024)
+        .thread_pool(Arc::from(scheduled_thread_pool::ScheduledThreadPool::new(1024)))
+        .build(manager)
+        .expect("Could not create db pool")
 }
 
 pub struct DbConn(pub r2d2::PooledConnection<ConnectionManager<PgConnection>>);
 
-impl<'a, 'r> FromRequest<'a, 'r> for DbConn {
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for DbConn {
     type Error = ();
 
-    fn from_request(request: &'a Request<'r>) -> request::Outcome<DbConn, ()> {
-        let pool = request.guard::<State<Pool>>()?;
-        match pool.get() {
-            Ok(conn) => Outcome::Success(DbConn(conn)),
-            Err(_) => Outcome::Failure((Status::ServiceUnavailable, ())),
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let pool = request.guard::<&State<Pool>>().await.succeeded().unwrap();
+        let mut tries = 0;
+        while tries < 10 {
+            match pool.get() {
+                Ok(conn) => return Outcome::Success(DbConn(conn)),
+                Err(_) => (),
+            }
+            tries += 1;
         }
+        Outcome::Failure((Status::ServiceUnavailable, ()))
     }
 }
 

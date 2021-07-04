@@ -1,3 +1,6 @@
 [global]
 keep_alive = 30
-workers = 128
+workers = 4096
+log = "normal"
+secret_key = "eZ8J/CJ2LuGx/lI481zxWK/3BnIy+LYjhwSZnKkdrRY="
+port = 4242

@@ -4,7 +4,7 @@
 
 {% block heading %} Recover! {% endblock %}
 
-{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Back!</a> {% endblock %}
+{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts/view/0">Back!</a> {% endblock %}
 
 {% block content %}
     <form enctype="multipart/form-data" action="/auth/forgot" method="post">

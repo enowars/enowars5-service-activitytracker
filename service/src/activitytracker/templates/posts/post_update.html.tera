@@ -4,7 +4,7 @@
 
 {% block heading %} Update! {% endblock %}
 
-{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Get me out of here!</a> {% endblock %}
+{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts/view/0">Get me out of here!</a> {% endblock %}
 
 {% block content %}
     {% if post %}

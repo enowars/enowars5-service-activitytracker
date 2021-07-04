@@ -58,14 +58,14 @@
     <div class="text-center col-6">
         <ul class="pagination">
             <li class="page-item {% if page == 0 %}disabled{% endif %}">
-                <a class="page-link" href="/posts/0" tabindex="-2">First</a>
+                <a class="page-link" href="/posts/view/0" tabindex="-2">First</a>
             </li>
             <li class="page-item {% if page == 0 %}disabled{% endif %}">
-                <a class="page-link" href="/posts/{{ page - 1 }}" tabindex="-1">Previous</a>
+                <a class="page-link" href="/posts/view/{{ page - 1 }}" tabindex="-1">Previous</a>
             </li>
             {% if start_page < page+1 %}
                 {% for i in range(start=start_page, end=page) %}
-                    <li class="page-item"><a class="page-link" href="/posts/{{ i }}">{{ i + 1 }}</a></li>
+                    <li class="page-item"><a class="page-link" href="/posts/view/{{ i }}">{{ i + 1 }}</a></li>
                 {% endfor %}
             {% endif %}
             <li class="page-item active">
@@ -73,14 +73,14 @@
             </li>
             {% if page+1 < end_page+1 %}
                 {% for i in range(start=(page+1), end=(end_page+1)) %}
-                    <li class="page-item"><a class="page-link" href="/posts/{{ i }}">{{ i + 1 }}</a></li>
+                    <li class="page-item"><a class="page-link" href="/posts/view/{{ i }}">{{ i + 1 }}</a></li>
                 {% endfor %}
             {% endif %}
             <li class="page-item {% if page == max_page %}disabled{% endif %}">
-                <a class="page-link" href="/posts/{{ page + 1 }}">Next</a>
+                <a class="page-link" href="/posts/view/{{ page + 1 }}">Next</a>
             </li>
             <li class="page-item {% if page == max_page %}disabled{% endif %}">
-                <a class="page-link" href="/posts/{{ max_page }}">Last</a>
+                <a class="page-link" href="/posts/view/{{ max_page }}">Last</a>
             </li>
         </ul>
     </div>

@@ -3,18 +3,19 @@ use crate::schema::*;
 use crate::models::posts::*;
 use crate::dbpool;
 
-use rocket_contrib::templates::Template;
+use rocket_dyn_templates::Template;
+use rocket::fs::TempFile;
 
 use rocket::request::FlashMessage;
 use rocket::response::{Flash, Redirect};
 
 use rocket::http::ContentType;
-use rocket::Data;
-use rocket_multipart_form_data::{MultipartFormData, MultipartFormDataField, MultipartFormDataOptions, FileField};
 use rocket_auth::User;
 use serde_json::json;
 use std::env;
 use crate::models::users::delete_old_users;
+use rocket::form::Form;
+use std::borrow::{BorrowMut};
 
 
 const PAGE_SIZE: usize = 10;
@@ -22,7 +23,7 @@ const PAGE_SIZE: usize = 10;
 
 #[get("/posts")]
 pub fn get_posts_redirect() -> Redirect {
-    Redirect::to("/posts/0")
+    Redirect::to("/posts/view/0")
 }
 
 // from https://www.reddit.com/r/rust/comments/bk7v15/my_next_favourite_way_to_divide_integers_rounding/
@@ -32,7 +33,7 @@ fn div_up(a: usize, b: usize) -> usize {
 }
 
 
-#[get("/posts/<page>")]
+#[get("/posts/view/<page>")]
 pub fn get_posts(user: Option<User>, conn: dbpool::DbConn, flash: Option<FlashMessage>, page: usize) -> Template {
     let user_id = match user {
         Some(ref u) => u.id(),
@@ -51,7 +52,7 @@ pub fn get_posts(user: Option<User>, conn: dbpool::DbConn, flash: Option<FlashMe
     Template::render("posts/post_list", json!({
             "data": uap,
             "flash": match flash {
-                Some(ref msg) => msg.msg(),
+                Some(ref msg) => msg.message(),
                 None => "List of activities"
             },
             "user": match user {
@@ -75,7 +76,7 @@ pub fn my_posts(user: User, conn: dbpool::DbConn, flash: Option<FlashMessage>) -
     Template::render("posts/post_list", json!({
             "data": uap,
             "flash": match flash {
-                Some(ref msg) => msg.msg(),
+                Some(ref msg) => msg.message(),
                 None => "List of activities"
             },
             "user": user.email().to_string(),
@@ -95,7 +96,7 @@ pub fn friends_posts(user: User, conn: dbpool::DbConn, flash: Option<FlashMessag
     Template::render("posts/post_list", json!({
             "data": uap,
             "flash": match flash {
-                Some(ref msg) => msg.msg(),
+                Some(ref msg) => msg.message(),
                 None => "List of activities"
             },
             "user": user.email().to_string(),
@@ -109,7 +110,7 @@ pub fn friends_posts(user: User, conn: dbpool::DbConn, flash: Option<FlashMessag
 #[get("/posts/new")]
 pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
     let (m_name, m_msg) = match flash {
-        Some(ref msg) => (msg.name(), msg.msg()),
+        Some(ref msg) => (msg.kind(), msg.message()),
         None => ("success", "Create a new activity")
     };
     Template::render("posts/post_new", json!({
@@ -119,57 +120,39 @@ pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
         }))
 }
 
+#[derive(Debug, FromForm)]
+pub struct PostForm<'v> {
+    body: &'v str,
+    visibility: &'v str,
+    protected: &'v str,
+    image: Option<TempFile<'v>>,
+}
+
 #[post("/posts/insert", data = "<post_data>")]
-pub fn insert(user: User, conn: dbpool::DbConn, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
-    /* Define the form */
-    let mut options = MultipartFormDataOptions::new();
-    options.allowed_fields = vec![
-        MultipartFormDataField::text("body"),
-        MultipartFormDataField::text("visibility"),
-        MultipartFormDataField::text("protected"),
-        MultipartFormDataField::file("image"),
-    ];
-
-    /* Match the form */
-    let multipart_form_data = MultipartFormData::parse(content_type, post_data, options);
-
-    match multipart_form_data {
-        Ok(form) => {
-            let image = handle_image(form.files.get("image"));
-            /* Insert data into database */
-            create_post(&*conn,
-                        match form.texts.get("body") {
-                            Some(value) => &value[0].text,
-                            None => "",
-                        },
-                        match form.texts.get("visibility") {
-                            Some(value) => &value[0].text,
-                            None => "private",
-                        },
-                        image,
-                        user.id(),
-                        match form.texts.get("protected") {
-                            Some(value) => value[0].text.as_str() == "true",
-                            None => false
-                        }
-            );
-
-            Flash::success(
-                Redirect::to("/posts"),
-                "Success! You created a new activity!",
-            )
-        },
-        Err(err_msg) => {
-            /* Falls to this patter if theres some fields that isn't allowed or bolsonaro rules this code */
-            Flash::error(
-                Redirect::to("/posts/new"),
-                format!(
-                    "Your form is broken: {}", // TODO: This is a potential debug/information exposure vulnerability!
-                    err_msg
-                ),
-            )
+pub async fn insert(user: User, conn: dbpool::DbConn, mut post_data: Form<PostForm<'_>>) -> Flash<Redirect> {
+    let body = post_data.body;
+    let visibility = post_data.visibility;
+    let protected = post_data.protected == "true";
+    let image = match post_data.image.as_mut() {
+        Some(img) => {
+            handle_image(img.borrow_mut()).await
         }
-    }
+        None => None
+    };
+
+    /* Insert data into database */
+    create_post(&*conn,
+                body,
+                visibility,
+                image,
+                user.id(),
+                protected
+    );
+
+    Flash::success(
+        Redirect::to("/posts"),
+        "Success! You created a new activity!",
+    )
 }
 
 
@@ -195,7 +178,7 @@ pub fn update(user: User, conn: dbpool::DbConn, flash: Option<FlashMessage>, ema
             "post": post,
             "err": err,
             "flash": match flash {
-                Some(ref msg) => msg.msg(),
+                Some(ref msg) => msg.message(),
                 None => "Create a new activity"
              },
             "user": user.email().to_string()
@@ -203,101 +186,72 @@ pub fn update(user: User, conn: dbpool::DbConn, flash: Option<FlashMessage>, ema
 }
 
 
-fn handle_image(image: Option<&Vec<FileField>>) -> Option<String> {
-    use std::fs;
-    match image {
-        Some(img) => {
-            let file_field = &img[0];
-            let _content_type = &file_field.content_type;
-            let _file_name = &file_field.file_name;
-            let _path = &file_field.path;
+async fn handle_image(image: &mut TempFile<'_>) -> Option<String> {
+    let file_name = image.raw_name().unwrap().dangerous_unsafe_unsanitized_raw().as_str();
+    let path = format!("imgs/{}", file_name);
 
-            let forbidden_chars = &"#%&{}\\<>*?/ $!'\":@+`|="[..]; // forbidden characters for filenames
-            if _file_name.as_ref().unwrap().as_str().contains("..") {   // prevent path traversal
-                return None;
-            } else if  _file_name.as_ref().unwrap().as_str().contains(forbidden_chars) {
-                return None;
-            }
-
-
-            let _: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
-
-            let absolute_path: String = format!("{}{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), _file_name.clone().unwrap());
-            fs::copy(_path, &absolute_path).unwrap();
-
-            Some(format!("imgs/{}", _file_name.clone().unwrap()))
-        }
-        None => None,
+    let forbidden_chars = &"#%&{}\\<>*?/ $!'\":@+`|="[..]; // forbidden characters for filenames
+    if file_name.contains("..") {   // prevent path traversal
+        return None;
+    } else if  file_name.contains(forbidden_chars) {
+        return None;
     }
+
+    let absolute_path: String = format!("{}{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), file_name);
+    image.copy_to(absolute_path).await.unwrap();
+
+    Some(path)
+
+}
+
+
+#[derive(Debug, FromForm)]
+pub struct PostEditForm<'v> {
+    id: i32,
+    body: Option<&'v str>,
+    visibility: Option<&'v str>,
+    image: Option<TempFile<'v>>,
 }
 
 
 #[post("/posts/update", data = "<post_data>")]
 #[allow(unused_variables)] // variable user is needed for permissions handler
-pub fn process_update(user: User, conn: dbpool::DbConn, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
+pub async fn process_update(user: User, conn: dbpool::DbConn, content_type: &ContentType, mut post_data: Form<PostEditForm<'_>>) -> Flash<Redirect> {
 
-    let mut options = MultipartFormDataOptions::new();
-    options.allowed_fields = vec![
-        MultipartFormDataField::text("id"),
-        MultipartFormDataField::text("body"),
-        MultipartFormDataField::text("visibility"),
-        MultipartFormDataField::file("image"),
-    ];
-
-    let multipart_form_data = MultipartFormData::parse(content_type, post_data, options);
-
-    match multipart_form_data {
-        Ok(form) => {
-            let id = form.texts.get("id").unwrap()[0]
-                .text
-                .parse::<i32>()
-                .unwrap();
-            let p = posts::table.filter(posts::id.eq(id)).first::<Post>(&*conn).expect("Error updating post.");
-            if p.protected {
-                return Flash::error(
-                    Redirect::to("/posts"),
-                    "This post is protected and cannot be updated."
-                );
-            }
-            if p.user_id != user.id() {
-                return Flash::error(
-                    Redirect::to("/posts"),
-                    "You cannot update this post."
-                );
-            }
-            let image = handle_image(form.files.get("image"));
-
-            update_post(&*conn,
-                        form.texts.get("id").unwrap()[0]
-                            .text
-                            .parse::<i32>()
-                            .unwrap(),
-                        match form.texts.get("body") {
-                            Some(value) => Some(&value[0].text),
-                            None => None,
-                        },
-                        match form.texts.get("visibility") {
-                            Some(value) => Some(&value[0].text),
-                            None => None,
-                        },
-                        image
-            );
-            Flash::success(
-                Redirect::to("/posts"),
-                "Success! Activity updated!",
-            )
-        }
-        Err(err_msg) => {
-            /* Falls to this patter if theres some fields that isn't allowed or bolsonaro rules this code */
-            Flash::error(
-                Redirect::to("/posts/update"),
-                format!(
-                    "Your form is broken: {}", // TODO: This is a potential debug/information exposure vulnerability!
-                    err_msg
-                ),
-            )
-        }
+    let id = post_data.id;
+    let p = posts::table.filter(posts::id.eq(id)).first::<Post>(&*conn).expect("Error updating post.");
+    if p.protected {
+        return Flash::error(
+            Redirect::to("/posts"),
+            "This post is protected and cannot be updated."
+        );
     }
+    if p.user_id != user.id() {
+        return Flash::error(
+            Redirect::to("/posts"),
+            "You cannot update this post."
+        );
+    }
+
+    let body = post_data.body;
+    let visibility = post_data.visibility;
+
+    let image = match post_data.image.as_mut() {
+        Some(img) => handle_image(img.borrow_mut()).await,
+        None => None
+    };
+
+
+    update_post(&*conn,
+                id,
+                body,
+                visibility,
+                image
+    );
+    Flash::success(
+        Redirect::to("/posts"),
+        "Success! Activity updated!",
+    )
 }
 
 #[get("/posts/delete/<email>/<id>")]

@@ -4,7 +4,7 @@
 
 {% block heading %} View Images! {% endblock %}
 
-{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts">Back!</a> {% endblock %}
+{% block action %} <a class="btn btn-primary btn-lg float-right" href="/posts/view/0">Back!</a> {% endblock %}
 
 {% block content %}
     {% for image in images %}

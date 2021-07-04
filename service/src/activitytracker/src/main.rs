@@ -1,6 +1,3 @@
-#![feature(proc_macro_hygiene, decl_macro)]
-#![feature(option_result_contains)]
-
 pub mod schema;
 pub mod models;
 pub mod views;
@@ -11,16 +8,18 @@ extern crate rocket;
 #[macro_use]
 extern crate diesel;
 extern crate dotenv;
-use rocket_contrib::templates::Template;
+use rocket_dyn_templates::Template;
 
 use std::path::{Path, PathBuf};
-use rocket::response::NamedFile;
+use rocket::fs::NamedFile;
 
 
 use dotenv::dotenv;
 use std::env;
 use rocket::response::Redirect;
 use rocket_auth::User;
+use tokio;
+
 
 
 pub fn establish_connection_pool() -> dbpool::Pool {
@@ -45,53 +44,56 @@ fn index() -> Redirect {
 
 /* Static files Handler */
 #[get("/posts/imgs/<file..>")]
-fn assets(file: PathBuf) -> Option<NamedFile> {
+async fn assets(file: PathBuf) -> Option<NamedFile> {
     if file.to_str()?.contains('\\') {
-        return NamedFile::open(Path::new("imgs/default.jpg")).ok();
+        return NamedFile::open(Path::new("imgs/default.jpg")).await.ok();
     }
     if file.to_str()?.contains('/') {
-        return NamedFile::open(Path::new("imgs/default.jpg")).ok();
+        return NamedFile::open(Path::new("imgs/default.jpg")).await.ok();
     }
     let path = Path::new(env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str()).join(file);
     if path.exists() {
-        NamedFile::open(path).ok()
+        NamedFile::open(path).await.ok()
     } else {
-        NamedFile::open(Path::new("imgs/default.jpg")).ok()
+        NamedFile::open(Path::new("imgs/default.jpg")).await.ok()
     }
 }
 
 /* Static files Handler for private pictures*/
 #[get("/data/imgs/profiles/<file..>")]
-fn assets_private(user: User, file: PathBuf) -> Option<NamedFile> {
+async fn assets_private(user: User, file: PathBuf) -> Option<NamedFile> {
     println!("{}", file.to_str()?);
     if !file.to_str()?.starts_with(format!("{}.", user.email()).as_str()) {
-        return NamedFile::open(Path::new("imgs/default.jpg")).ok();
+        return NamedFile::open(Path::new("imgs/default.jpg")).await.ok();
     }
     if file.to_str()?.contains('\\') {
-        return NamedFile::open(Path::new("imgs/default.jpg")).ok();
+        return NamedFile::open(Path::new("imgs/default.jpg")).await.ok();
     }
     if file.to_str()?.contains('/') {
-        return NamedFile::open(Path::new("imgs/default.jpg")).ok();
+        return NamedFile::open(Path::new("imgs/default.jpg")).await.ok();
     }
     let path = Path::new((env::var("DATA_DIR").unwrap_or("imgs/".to_string()) + "profiles/").as_str()).join(file);
     if path.exists() {
-        NamedFile::open(path).ok()
+        NamedFile::open(path).await.ok()
     } else {
-        NamedFile::open(Path::new("imgs/default.jpg")).ok()
+        NamedFile::open(Path::new("imgs/default.jpg")).await.ok()
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     dotenv().ok();
-    let users = rocket_auth::Users::open_postgres(format!("host={} user={} password='{}'",
-                                                          env::var("DB_HOST").expect("DATABASE_URL must be set"),
-                                                          env::var("DB_USER").expect("DATABASE_URL must be set"),
-                                                          env::var("DB_PASS").expect("DATABASE_URL must be set")
-    ).as_str()).unwrap();
+    let users = rocket_auth::Users::open_postgres(format!("postgres://{}:{}@{}:{}/{}",
+                                                          env::var("DB_USER").expect("DB_USER must be set"),
+                                                          env::var("DB_PASS").expect("DB_PASS must be set"),
+                                                          env::var("DB_HOST").expect("DB_HOST must be set"),
+                                                          5432,
+                                                          env::var("DB_NAME").expect("DB_NAME must be set"),
+    ).as_str()).await.unwrap();
 
     let pool = establish_connection_pool();
 
-    rocket::ignite().mount("/", routes![
+    rocket::build().mount("/", routes![
         index,
         assets,
         assets_private,
@@ -122,5 +124,6 @@ fn main() {
         .manage(users)
         .manage(pool)
         .attach(Template::fairing())
-        .launch();
+        .launch()
+    .await.unwrap();
 }

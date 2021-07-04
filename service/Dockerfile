@@ -1,8 +1,8 @@
 # Use a suitable base-image.
 FROM rustlang/rust:nightly-buster
 
-RUN rustup toolchain install nightly-2021-05-20
-RUN rustup default nightly-2021-05-20
+#RUN rustup toolchain install nightly-2021-05-20
+#RUN rustup default nightly-2021-05-20
 
 # Create our mapped data volume endpoint
 RUN mkdir /data/
@@ -12,10 +12,10 @@ RUN mkdir /static/
 WORKDIR /service/
 
 # Expose the service's port
-EXPOSE 8000
+EXPOSE 4242
 
 ENV ROCKET_ADDRESS=0.0.0.0
-ENV ROCKET_PORT=8000
+ENV ROCKET_PORT=4242
 
 RUN apt-get update
 RUN apt-get install libpq-dev -y

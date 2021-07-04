@@ -1,25 +1,24 @@
 // from https://github.com/tvallotton/rocket_auth/blob/master/examples/postgres.rs, but slightly
 // modified!!
 
-use rocket::{request::Form, *};
+use rocket::{*};
+use rocket::form::Form;
 use rocket_auth::*;
-use rocket_contrib::templates::{Template};
+use rocket_dyn_templates::Template;
 use serde_json::json;
 use rocket::response::{Flash, Redirect};
 use rocket::request::FlashMessage;
-use rocket_multipart_form_data::{
-    MultipartFormData, MultipartFormDataField, MultipartFormDataOptions,
-};
-use rocket::http::ContentType;
 use crate::models::users::{update_user_image, get_user_id, get_user_image, update_user};
 use std::env;
 use file_diff::{diff};
 use argon2::{self};
 use chrono::{Datelike, Utc};
 use crate::dbpool;
-
+use rand::Rng;
 
 use rand::random;
+use rocket::fs::TempFile;
+
 pub fn rand_string(size: usize) -> String {
     (0..)
         .map(|_| random::<u8>())
@@ -33,7 +32,7 @@ pub fn rand_string(size: usize) -> String {
 pub fn get_login(flash: Option<FlashMessage>) -> Template {
     if let Some(ref msg) = flash {
         Template::render("auth/login", json!({
-            "flash": msg.msg()
+            "flash": msg.message()
         }))
     } else {
         Template::render("auth/login", json!({}))
@@ -41,8 +40,8 @@ pub fn get_login(flash: Option<FlashMessage>) -> Template {
 }
 
 #[post("/auth/login", data = "<form>")]
-pub fn post_login(mut auth: Auth, form: Form<Login>) -> Flash<Redirect> {
-    let res = auth.login(&form).map_err(|x|x.message(Language::EN));
+pub async fn post_login(mut auth: Auth<'_>, form: Form<Login>) -> Flash<Redirect> {
+    let res = auth.login(&form).await;
     match res {
         Ok(()) => Flash::success(
             Redirect::to("/posts"),
@@ -62,90 +61,66 @@ pub fn post_login(mut auth: Auth, form: Form<Login>) -> Flash<Redirect> {
 pub fn get_signup(flash: Option<FlashMessage>) -> Template {
     if let Some(ref msg) = flash {
         Template::render("auth/signup", json!({
-            "flash": msg.msg()
+            "flash": msg.message()
         }))
     } else {
         Template::render("auth/signup", json!({}))
     }
 }
 
+
+#[derive(Debug, FromForm)]
+pub struct SignupForm<'v> {
+    email: &'v str,
+    password: &'v str,
+    image: Option<TempFile<'v>>,
+}
+
+
 #[post("/auth/signup", data = "<post_data>")]
-pub fn post_signup(mut auth: Auth, conn: dbpool::DbConn, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
-    use std::fs;
-    let mut options = MultipartFormDataOptions::new();
-    options.allowed_fields = vec![
-        MultipartFormDataField::text("email"),
-        MultipartFormDataField::text("password"),
-        MultipartFormDataField::file("image"),
-    ];
-    let multipart_form_data = MultipartFormData::parse(content_type, post_data, options);
-    match multipart_form_data {
-        Ok(form_data) => {
-            let email = match form_data.texts.get("email") {Some(value) => value[0].text.as_str(), None => ""};
-            let password= match form_data.texts.get("password") {Some(value) => value[0].text.as_str(), None => ""};
-            let form: Signup = serde_json::from_str(format!("{{\"email\": \"{}\", \"password\": \"{}\"}}", email, password).as_str()).unwrap();
-            match auth.signup(&form) {
-                Err(e) => return Flash::error(
-                    Redirect::to("/auth/signup"),
-                    format!(
-                        "Error creating user: {}",
-                        e.to_string()
-                    ),
-                ),
-                _ => ()
-            };
-            let image = match form_data.files.get("image") {
-                Some(img) => {
-                    let file_field = &img[0];
-                    let _content_type = &file_field.content_type;
-                    let _file_name = &file_field.file_name;
-                    let _path = &file_field.path;
+pub async fn post_signup(mut auth: Auth<'_>, conn: dbpool::DbConn, mut post_data: Form<SignupForm<'_>>) -> Flash<Redirect> {
+    let email = post_data.email;
+    let password= post_data.password;
+    let form: Signup = serde_json::from_str(format!("{{\"email\": \"{}\", \"password\": \"{}\"}}", email, password).as_str()).unwrap();
+    match auth.signup(&form).await {
+        Err(e) => return Flash::error(
+            Redirect::to("/auth/signup"),
+            format!(
+                "Error creating user: {}",
+                e.to_string()
+            ),
+        ),
+        _ => ()
+    };
 
-                    let _: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
+    match post_data.image.as_mut() {
+        Some(image) => {
+            let now = Utc::now();
+            let (_, year) = now.year_ce();
 
-                    let now = Utc::now();
-                    let (_, year) = now.year_ce();
+            let absolute_path: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.{}-{:02}-{:02}.png", email, year, now.month(), now.day()));
+            let absolute_path_without_date: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.", email));
+            image.copy_to(absolute_path).await.unwrap();
 
-                    let absolute_path: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.{}-{:02}-{:02}.png", email, year, now.month(), now.day()));
-                    let absolute_path_without_date: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.", email));
-                    fs::copy(_path, &absolute_path).unwrap();
-
-                    Some(absolute_path_without_date)
-                }
-                None => None,
-            };
-            match image {
-                Some(path) => {
-                    update_user_image(&*conn, email, path.as_str());
-                },
-                None => ()
-            };
-            match auth.login(&form.into()) {
-                Err(e) => return Flash::error(
-                    Redirect::to("/auth/login"),
-                    format!(
-                        "User created but error logging in: {}",
-                        e.to_string()
-                    ),
-                ),
-                _ => ()
-            };
-            Flash::success(
-                Redirect::to("/posts"),
-                "Logged in!",
-            )
+            update_user_image(&*conn, email, absolute_path_without_date.as_str());
         }
-        Err(err_msg) => {
-            /* Falls to this patter if theres some fields that isn't allowed or bolsonaro rules this code */
-            Flash::error(
-                Redirect::to("/auth/signup"),
-                format!(
-                    "Your form is broken: {}", // TODO: This is a potential debug/information exposure vulnerability!
-                    err_msg
-                ),
-            )
-        }
+        None => ()
     }
+
+    match auth.login(&form.into()).await {
+        Err(e) => return Flash::error(
+            Redirect::to("/auth/login"),
+            format!(
+                "User created but error logging in: {}",
+                e.to_string()
+            ),
+        ),
+        _ => ()
+    };
+    Flash::success(
+        Redirect::to("/posts"),
+        "Logged in!",
+    )
 }
 
 
@@ -166,7 +141,7 @@ pub fn get_viewimages(user: User, flash: Option<FlashMessage>) -> Template {
             "user": user.email().to_string(),
             "images": images,
             "flash": match flash {
-                Some(ref msg) => msg.msg(),
+                Some(ref msg) => msg.message(),
                 None => "List of activities"
             },
         }))
@@ -177,7 +152,7 @@ pub fn get_viewimages(user: User, flash: Option<FlashMessage>) -> Template {
 pub fn get_addimage(user: User, flash: Option<FlashMessage>) -> Template {
     if let Some(ref msg) = flash {
         Template::render("auth/addimage", json!({
-            "flash": msg.msg(),
+            "flash": msg.message(),
             "user": user.email().to_string()
         }))
     } else {
@@ -185,152 +160,108 @@ pub fn get_addimage(user: User, flash: Option<FlashMessage>) -> Template {
     }
 }
 
+#[derive(Debug, FromForm)]
+pub struct ImageForm<'v> {
+    image: TempFile<'v>,
+}
+
 #[post("/auth/addimage", data = "<post_data>")]
-pub fn post_addimage(user: User, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
-    use std::fs;
-    let mut options = MultipartFormDataOptions::new();
-    options.allowed_fields = vec![
-        MultipartFormDataField::file("image"),
-    ];
-    let multipart_form_data = MultipartFormData::parse(content_type, post_data, options);
-    match multipart_form_data {
-        Ok(form_data) => {
-            let email = user.email();
-            let _ = match form_data.files.get("image") {
-                Some(img) => {
-                    let file_field = &img[0];
-                    let _content_type = &file_field.content_type;
-                    let _file_name = &file_field.file_name;
-                    let _path = &file_field.path;
+pub async fn post_addimage(user: User, mut post_data: Form<ImageForm<'_>>) -> Flash<Redirect> {
+    let email = user.email();
 
-                    let _: Vec<&str> = _file_name.as_ref().unwrap().split('.').collect(); /* Reparsing the fileformat */
+    let now = Utc::now();
+    let (_, year) = now.year_ce();
 
-                    let now = Utc::now();
-                    let (_, year) = now.year_ce();
+    let absolute_path: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.{}-{:02}-{:02}.png", email, year, now.month(), now.day()));
+    post_data.image.copy_to(absolute_path).await.unwrap();
 
-                    let absolute_path: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.{}-{:02}-{:02}.png", email, year, now.month(), now.day()));
-                    let absolute_path_without_date: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.", email));
-                    fs::copy(_path, &absolute_path).unwrap();
-
-                    Some(absolute_path_without_date)
-                }
-                None => None,
-            };
-            Flash::success(
-                Redirect::to("/auth/viewimages"),
-                "Added new image!",
-            )
-        }
-        Err(err_msg) => {
-            /* Falls to this patter if theres some fields that isn't allowed or bolsonaro rules this code */
-            Flash::error(
-                Redirect::to("/auth/addimage"),
-                format!(
-                    "Your form is broken: {}", // TODO: This is a potential debug/information exposure vulnerability!
-                    err_msg
-                ),
-            )
-        }
-    }
+    Flash::success(
+        Redirect::to("/auth/viewimages"),
+        "Added new image!",
+    )
 }
 
 #[get("/auth/forgot")]
 pub fn get_forgot(flash: Option<FlashMessage>) -> Template {
     if let Some(ref msg) = flash {
         Template::render("auth/forgot", json!({
-            "flash": msg.msg()
+            "flash": msg.message()
         }))
     } else {
         Template::render("auth/forgot", json!({}))
     }
 }
 
+
+#[derive(Debug, FromForm)]
+pub struct ForgotForm<'v> {
+    email: &'v str,
+    password: &'v str,
+    image: TempFile<'v>,
+}
+
+
 #[post("/auth/forgot", data = "<post_data>")]
-pub fn post_forgot(mut auth: Auth, conn: dbpool::DbConn, content_type: &ContentType, post_data: Data) -> Flash<Redirect> {
+pub async fn post_forgot(mut auth: Auth<'_>, conn: dbpool::DbConn, mut post_data: Form<ForgotForm<'_>>) -> Flash<Redirect> {
     use std::fs;
-    let mut options = MultipartFormDataOptions::new();
-    options.allowed_fields = vec![
-        MultipartFormDataField::text("email"),
-        MultipartFormDataField::text("password"),
-        MultipartFormDataField::file("image"),
-    ];
-    let multipart_form_data = MultipartFormData::parse(content_type, post_data, options);
-    match multipart_form_data {
-        Ok(form_data) => {
-            let email = match form_data.texts.get("email") {Some(value) => value[0].text.as_str(), None => ""};
-            let password= match form_data.texts.get("password") {Some(value) => value[0].text.as_str(), None => ""};
-            let user_id = get_user_id(&*conn, email);
-            let upload_image = match form_data.files.get("image") {
-                Some(img) => {
-                    let file_field = &img[0];
-                    let _path = &file_field.path;
-                    Some(_path)
-                }
-                None => None,
-            }.unwrap();
-            let user_image = get_user_image(&*conn, email);
 
-            let mut matching_image_found = false;
-            let paths = fs::read_dir(format!("{}profiles", env::var("DATA_DIR").unwrap_or("/".to_string()))).unwrap();
-            for path in paths {
-                let p = path.unwrap().path().display().to_string();
-                if p.starts_with(&user_image) {
-                    if diff(upload_image.to_str().unwrap(), p.as_str()) {
-                        matching_image_found = true;
-                        break;
-                    }
-                }
-            }
+    let email = post_data.email;
+    let password= post_data.password;
+    let user_id = get_user_id(&*conn, email);
+    post_data.image.persist_to(format!("{}.png", rand::thread_rng().gen_range(0..i32::MAX))).await.unwrap();
+    let upload_image = post_data.image.path().unwrap();
+    let user_image = get_user_image(&*conn, email);
 
-            if matching_image_found { // images are the same
-                let password_bytes = password.as_bytes();
-                let salt = rand_string(10);
-                let config = argon2::Config::default();
-                let hash = argon2::hash_encoded(password_bytes, &salt.as_bytes(), &config).unwrap();
-                update_user(&*conn, user_id, hash.as_str());
-                let form: Signup = serde_json::from_str(format!("{{\"email\": \"{}\", \"password\": \"{}\"}}", email, password).as_str()).unwrap();
-                match auth.login(&form.into()) {
-                    Err(e) => return Flash::error(
-                        Redirect::to("/auth/login"),
-                        format!(
-                            "User created but error logging in: {}",
-                            e.to_string()
-                        ),
-                    ),
-                    _ => Flash::success(
-                        Redirect::to("/posts"),
-                        "Logged in!",
-                    )
-                }
-            } else {
-                return Flash::error(
-                    Redirect::to("/auth/forgot"),
-                    format!(
-                        "Verification images do not match"
-                    )
-                )
+    let mut matching_image_found = false;
+    let paths = fs::read_dir(format!("{}profiles", env::var("DATA_DIR").unwrap_or("/".to_string()))).unwrap();
+    for path in paths {
+        let p = path.unwrap().path().display().to_string();
+        if p.starts_with(&user_image) {
+            if diff(upload_image.to_str().unwrap(), p.as_str()) {
+                matching_image_found = true;
+                break;
             }
-        }
-        Err(err_msg) => {
-            /* Falls to this patter if theres some fields that isn't allowed or bolsonaro rules this code */
-            Flash::error(
-                Redirect::to("/auth/signup"),
-                format!(
-                    "Your form is broken: {}", // TODO: This is a potential debug/information exposure vulnerability!
-                    err_msg
-                ),
-            )
         }
     }
+
+    if matching_image_found { // images are the same
+        let password_bytes = password.as_bytes();
+        let salt = rand_string(10);
+        let config = argon2::Config::default();
+        let hash = argon2::hash_encoded(password_bytes, &salt.as_bytes(), &config).unwrap();
+        update_user(&*conn, user_id, hash.as_str());
+        let form: Signup = serde_json::from_str(format!("{{\"email\": \"{}\", \"password\": \"{}\"}}", email, password).as_str()).unwrap();
+        match auth.login(&form.into()).await {
+            Err(e) => return Flash::error(
+                Redirect::to("/auth/login"),
+                format!(
+                    "User created but error logging in: {}",
+                    e.to_string()
+                ),
+            ),
+            _ => Flash::success(
+                Redirect::to("/posts"),
+                "Logged in!",
+            )
+        }
+    } else {
+        return Flash::error(
+            Redirect::to("/auth/forgot"),
+            format!(
+                "Verification images do not match"
+            )
+        )
+    }
+
 }
 
 #[get("/auth/logout")]
 pub fn logout(mut auth: Auth) -> Result<Redirect, String> {
-    auth.logout().expect("Could not log out!");
+    auth.logout().unwrap();
     Ok(Redirect::to("/"))
 }
 #[get("/auth/delete")]
-pub fn delete(mut auth: Auth) -> Result<Redirect, String> {
-    auth.delete().expect("Could not delete post!");
+pub async fn delete(mut auth: Auth<'_>) -> Result<Redirect, String> {
+    auth.delete().await.expect("Could not delete post!");
     Ok(Redirect::to("/"))
 }
