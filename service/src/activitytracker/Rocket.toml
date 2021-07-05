@@ -1,5 +1,5 @@
 [global]
-keep_alive = 0
+keep_alive = 5
 workers = 128
 log = "normal"
 secret_key = "eZ8J/CJ2LuGx/lI481zxWK/3BnIy+LYjhwSZnKkdrRY="
