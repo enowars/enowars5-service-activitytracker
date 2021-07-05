@@ -1,7 +1,6 @@
 pub mod schema;
 pub mod models;
 pub mod views;
-pub mod dbpool;
 
 #[macro_use]
 extern crate rocket;
@@ -20,21 +19,7 @@ use rocket::response::Redirect;
 use rocket_auth::User;
 use tokio;
 
-
-
-pub fn establish_connection_pool() -> dbpool::Pool {
-    dotenv().ok();
-
-    let config = dbpool::DbConfig{
-        host: env::var("DB_HOST").expect("DATABASE_URL must be set"),
-        port: 5432,
-        user: env::var("DB_USER").expect("DATABASE_URL must be set"),
-        password: env::var("DB_PASS").expect("DATABASE_URL must be set"),
-        database: env::var("DB_NAME").expect("DATABASE_URL must be set")
-    };
-
-    dbpool::init_pool(config)
-}
+use rocket_sync_db_pools::{database};
 
 
 #[get("/")]
@@ -80,6 +65,11 @@ async fn assets_private(user: User, file: PathBuf) -> Option<NamedFile> {
     }
 }
 
+
+#[database("pg_diesel")]
+pub struct PgDieselDbConn(diesel::PgConnection);
+
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -91,7 +81,6 @@ async fn main() {
                                                           env::var("DB_NAME").expect("DB_NAME must be set"),
     ).as_str()).await.unwrap();
 
-    let pool = establish_connection_pool();
 
     rocket::build().mount("/", routes![
         index,
@@ -122,8 +111,8 @@ async fn main() {
         views::friends::insert
     ])
         .manage(users)
-        .manage(pool)
         .attach(Template::fairing())
+        .attach(PgDieselDbConn::fairing())
         .launch()
     .await.unwrap();
 }

@@ -7,7 +7,7 @@ use serde::{Serialize};
 use std::env;
 
 
-#[derive(Queryable, Identifiable, Serialize)]
+#[derive(Queryable, Identifiable, Serialize, Clone)]
 pub struct User {
     pub id: i32,
     pub email: String,
@@ -38,14 +38,14 @@ pub fn create_user(conn: &PgConnection, email: &str, password: &str, is_admin: b
         .expect("Error creating user.")
 }
 
-pub fn delete_old_users(conn: &PgConnection) {
+pub async fn delete_old_users(conn: &crate::PgDieselDbConn) {
     use std::fs;
     let timestamp = std::time::SystemTime::now() - std::time::Duration::from_secs(60*10);
     let query = users::table
         .filter(dsl::created.lt(timestamp));
-    let user_list: Vec<String> = query
+    let user_list: Vec<String> = conn.run(move |c| query
         .select(dsl::email)
-        .load::<String>(conn).expect("Error loading users")
+        .load::<String>(c)).await.expect("Error loading users")
         .into_iter()
         .collect();
     let paths = fs::read_dir(format!("{}profiles", env::var("DATA_DIR").unwrap_or("/".to_string()))).unwrap();
@@ -59,41 +59,35 @@ pub fn delete_old_users(conn: &PgConnection) {
             }
         }
     }
-    diesel::delete(query).execute(conn).expect("Error deleting users");
+    conn.run(move |c| diesel::delete(query).execute(c)).await.expect("Error deleting users");
 }
 
-pub fn get_user_id(conn: &PgConnection, email: &str) -> i32 {
-    users::table
+pub async fn get_user_id(conn: &crate::PgDieselDbConn, email: String) -> i32 {
+    conn.run(move |c| users::table
         .select(dsl::id)
         .filter(dsl::email.eq(email))
-        .first(conn)
+        .first(c)).await
         .expect("No such user.")
 }
 
-pub fn get_user_image(conn: &PgConnection, email: &str) -> String {
-    users::table
+pub async fn get_user_image(conn: &crate::PgDieselDbConn, email: String) -> String {
+    conn.run(move |c| users::table
         .select(dsl::verification_image)
         .filter(dsl::email.eq(email))
-        .first(conn)
+        .first(c)).await
         .expect("No such user.")
 }
 
-pub fn update_user(conn: &PgConnection, id: i32, password: &str) -> User {
-    diesel::update(dsl::users.find(id))
+pub async fn update_user(conn: &crate::PgDieselDbConn, id: i32, password: String) -> User {
+    conn.run(move |c| diesel::update(dsl::users.find(id))
         .set(dsl::password.eq(password))
-        .get_result(conn)
+        .get_result(c)).await
         .expect("Error updating user.")
 }
 
-pub fn update_user_image(conn: &PgConnection, email: &str, image: &str) -> User {
-    diesel::update(dsl::users.filter(dsl::email.eq(email)))
+pub async fn update_user_image(conn: &crate::PgDieselDbConn, email: String, image: String) -> User {
+    conn.run(move |c| diesel::update(dsl::users.filter(dsl::email.eq(email)))
         .set(dsl::verification_image.eq(image))
-        .get_result(conn)
+        .get_result(c)).await
         .expect("Error updating user.")
-}
-
-pub fn delete_user(conn: &PgConnection, id: i32) -> usize {
-    diesel::delete(dsl::users.find(id))
-        .execute(conn)
-        .expect("Error deleting user.")
 }

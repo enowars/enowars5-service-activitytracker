@@ -1,4 +1,3 @@
-use diesel::pg::PgConnection;
 use crate::schema::posts;
 use crate::schema::users;
 use crate::diesel::RunQueryDsl;
@@ -26,9 +25,9 @@ pub struct Post {
 
 #[derive(Insertable, AsChangeset)]
 #[table_name="posts"]
-pub struct NewPost<'a> {
-    pub body: &'a str,
-    pub visibility: &'a str,
+pub struct NewPost {
+    pub body: String,
+    pub visibility: String,
     pub image: Option<String>,
     pub user_id: i32,
     pub user_post_count: i32,
@@ -43,118 +42,133 @@ impl From<(User, Vec<Post>)> for UsersAndPosts {
     }
 }
 impl UsersAndPosts {
-    pub fn load_all(email_id: i32, page_size: usize, page: usize, conn: &PgConnection) -> Vec<UsersAndPosts>{
-        let friends: Vec<i32> = get_all_friends(conn, email_id);
-        let users: Vec<User> = users::table.filter(users::post_count.gt(0).or(users::id.eq(email_id)).or(users::id.eq_any(&friends))).order_by(users::id.desc()).limit(page_size as i64).offset((page*page_size) as i64).load::<User>(conn).expect("Error loading users").into_iter().collect();
-        let posts = Post::belonging_to(&users)
+    pub async fn load_all(email_id: i32, page_size: usize, page: usize, conn: &crate::PgDieselDbConn) -> Vec<UsersAndPosts>{
+        let friends: Vec<i32> = get_all_friends(&conn, email_id).await;
+        let users: Vec<User> = conn.run(move |c| users::table
+            .filter(users::post_count.gt(0).or(users::id.eq(email_id)).or(users::id.eq_any(&friends)))
+            .order_by(users::id.desc())
+            .limit(page_size as i64)
+            .offset((page*page_size) as i64)
+            .load::<User>(c)).await.expect("Error loading users").into_iter().collect();
+        let friends: Vec<i32> = get_all_friends(&conn, email_id).await;
+        let users_clone = users.clone();
+        let posts = conn.run(move |c| Post::belonging_to(&users_clone)
             .filter(posts::deleted.eq(false))
             .filter(posts::visibility.eq("public").or(posts::user_id.eq(email_id)).or(posts::user_id.eq_any(&friends).and(posts::visibility.eq("friends"))))
-            .load::<Post>(conn).expect("Error loading posts")
+            .load::<Post>(c)).await.expect("Error loading posts")
             .grouped_by(&users);
         let mut res = users.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>();
         res.retain(|uap| !uap.1.is_empty());
         res
     }
-    pub fn load_mine(email_id: i32, conn: &PgConnection) -> Vec<UsersAndPosts>{
-        let user: Vec<User> = users::table.filter(users::id.eq(email_id)).load::<User>(conn).expect("Error loading users").into_iter().collect();
-        let posts = Post::belonging_to(&user)
+    pub async fn load_mine(email_id: i32, conn: &crate::PgDieselDbConn) -> Vec<UsersAndPosts>{
+        let user: Vec<User> = conn.run(move |c| users::table.filter(users::id.eq(email_id)).load::<User>(c)).await.expect("Error loading users").into_iter().collect();
+        let user_clone = user.clone();
+        let posts = conn.run(move |c| Post::belonging_to(&user_clone)
             .filter(posts::deleted.eq(false))
-            .load::<Post>(conn).expect("Error loading posts")
+            .load::<Post>(c)).await.expect("Error loading posts")
             .grouped_by(&user);
         user.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>()
     }
-    pub fn load_friends(email_id: i32, conn: &PgConnection) -> Vec<UsersAndPosts>{
-        let friends: Vec<i32> = get_all_friends(conn, email_id);
-        let user: Vec<User> = users::table.filter(users::id.eq_any(&friends)).load::<User>(conn).expect("Error loading users").into_iter().collect();
-        let posts = Post::belonging_to(&user)
+    pub async fn load_friends(email_id: i32, conn: &crate::PgDieselDbConn) -> Vec<UsersAndPosts>{
+        let friends: Vec<i32> = get_all_friends(conn, email_id).await;
+        let friends_clone = friends.clone();
+        let user: Vec<User> = conn.run(move |c| users::table.filter(users::id.eq_any(&friends_clone)).load::<User>(c)).await.expect("Error loading users").into_iter().collect();
+        let user_clone = user.clone();
+        let posts = conn.run(move |c| Post::belonging_to(&user_clone)
             .filter(posts::deleted.eq(false))
             .filter(posts::visibility.eq("public").or(posts::user_id.eq(email_id)).or(posts::user_id.eq_any(&friends).and(posts::visibility.eq("friends"))))
-            .load::<Post>(conn).expect("Error loading posts")
+            .load::<Post>(c)).await.expect("Error loading posts")
             .grouped_by(&user);
         user.into_iter().zip(posts).map(UsersAndPosts::from).collect::<Vec<_>>()
     }
-    pub fn post_count(email_id: i32, conn: &PgConnection) -> i64 {
-        users::table
+    pub async fn post_count(email_id: i32, conn: &crate::PgDieselDbConn) -> i64 {
+        conn.run(move |c| users::table
             .filter(users::post_count.gt(0).or(users::id.eq(email_id)))
             .select(count(users::id))
-            .first::<i64>(conn).expect("Error getting post count.")
+            .first::<i64>(c)).await.expect("Error getting post count.")
     }
 }
 
-pub fn update_visible_post_count(user_id: i32, conn: &PgConnection) {
-    let visible_post_count = (posts::table
-            .filter(posts::user_id.eq(user_id))
-            .filter(posts::visibility.eq("public"))
-            .filter(posts::deleted.eq(false))
-            .select(count(posts::id))
-            .first::<i64>(conn).expect("Error updating user.")) as i32;
+pub async fn update_visible_post_count(user_id: i32, conn: &crate::PgDieselDbConn) {
+    let visible_post_count = conn.run(move |c| (posts::table
+        .filter(posts::user_id.eq(user_id))
+        .filter(posts::visibility.eq("public"))
+        .filter(posts::deleted.eq(false))
+        .select(count(posts::id))
+        .first::<i64>(c)).expect("Error updating user.")).await as i32;
 
-    diesel::update(users::table.find(user_id))
+    conn.run(move |c| diesel::update(users::table.find(user_id))
         .set(users::post_count.eq(visible_post_count))
-        .get_result::<User>(conn)
+        .get_result::<User>(c)).await
         .expect("Error updating user.");
 }
 
-pub fn create_post(conn: &PgConnection, body: &str, visibility: &str, image: Option<String>, user_id: i32, protected: bool) -> Post {
-    let user_post_count = (posts::table
+pub async fn create_post(conn: crate::PgDieselDbConn, body: String, visibility: String, image: Option<String>, user_id: i32, protected: bool) -> Post {
+
+
+    let user_post_count = conn.run(move |c| (posts::table
         .select(count(posts::id))
         .filter(posts::user_id.eq(user_id))
-        .first::<i64>(conn).expect("Error saving post.") + 1) as i32; // Trust me, this is safe!
+        .first::<i64>(c)).expect("Error saving post.") + 1).await as i32; // Trust me, this is safe!
 
-    let new_post = NewPost {
-        body, visibility, image, user_id, user_post_count, protected
-    };
+    let res = conn.run(move |c| diesel::insert_into(posts::table)
+        .values(NewPost {
+            body,
+            visibility,
+            image,
+            user_id,
+            user_post_count,
+            protected
+        })
+        .get_result(c)
+    ).await.expect("Error saving post.");
 
-
-    let res = diesel::insert_into(posts::table)
-        .values(&new_post)
-        .get_result(conn)
-        .expect("Error saving post.");
-
-    update_visible_post_count(user_id, conn);
+    update_visible_post_count(user_id, &conn).await;
     res
 }
 
-pub fn update_post(conn: &PgConnection, id: i32, body: Option<&str>, visibility: Option<&str>, image: Option<String>) -> Post {
+pub async fn update_post(conn: crate::PgDieselDbConn, id: i32, body: Option<String>, visibility: Option<String>, image: Option<String>) -> Post {
     match body {
-        Some(b) => {diesel::update(dsl::posts.find(id))
-            .set(dsl::body.eq(b))
-            .get_result::<Post>(conn)
-            .expect("Error updating post.");
-            ()
-        },
-        None => ()
-    };
-    match visibility {
-        Some(v) => {
-            let post = diesel::update(dsl::posts.find(id))
-                .set(dsl::visibility.eq(v))
-                .get_result::<Post>(conn)
+        Some(b) => {
+            conn.run(move |c| diesel::update(dsl::posts.find(id))
+                .set(dsl::body.eq(b))
+                .get_result::<Post>(c)).await
                 .expect("Error updating post.");
-            update_visible_post_count(post.user_id, conn);
             ()
         },
         None => ()
     };
     match image {
         Some(i) => {
-            diesel::update(dsl::posts.find(id))
+            conn.run(move |c| diesel::update(dsl::posts.find(id))
                 .set(dsl::image.eq(i))
-                .get_result::<Post>(conn)
+                .get_result::<Post>(c)).await
                 .expect("Error updating post.");
             ()
         },
         None => ()
     };
-    posts::table.filter(dsl::id.eq(id)).first(conn).expect("Error loading post.")
+    match visibility {
+        Some(v) => {
+            let post = conn.run(move |c| diesel::update(dsl::posts.find(id))
+                .set(dsl::visibility.eq(v))
+                .get_result::<Post>(c)).await
+                .expect("Error updating post.");
+            update_visible_post_count(post.user_id, &conn).await;
+            ()
+        },
+        None => ()
+    };
+    conn.run(move |c| posts::table.filter(dsl::id.eq(id)).first(c)).await.expect("Error loading post.")
 
 }
 
-pub fn delete_post(conn: &PgConnection, id: i32) -> usize {
-    let post = diesel::update(dsl::posts.find(id))
+pub async fn delete_post(conn: crate::PgDieselDbConn, id: i32) -> usize {
+    let post = conn.run(move |c| diesel::update(dsl::posts.find(id))
         .set(dsl::deleted.eq(true))
-        .get_result::<Post>(conn)
+        .get_result::<Post>(c)).await
         .expect("Error deleting post.");
-    update_visible_post_count(post.user_id, conn);
+    update_visible_post_count(post.user_id, &conn).await;
     1
 }

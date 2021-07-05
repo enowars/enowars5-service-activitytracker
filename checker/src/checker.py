@@ -40,6 +40,8 @@ class ActivitytrackerChecker(BaseChecker):
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
 
+    POSTS_PAGE = '/posts/view/0'
+
     # END CHECKER PARAMETERS
 
     def __init__(self, task: CheckerTaskMessage,
@@ -64,23 +66,41 @@ class ActivitytrackerChecker(BaseChecker):
         im.save(filename, format='png')
         return filename
 
-    def register_user(self, email: str, password: str, image_path: str = ""):
-        filename = "/tmp/" + secrets.token_urlsafe(10) + ".png"
-        if image_path:
-            filename = image_path
+    @staticmethod
+    def check_response(resp, status, location, action="performing request"):
+        if resp.status_code != status:
+            raise BrokenServiceException(f"Unexpected status code after {action}: {resp.status_code}")
+        if location:
+            if resp.headers['Location'] != location:
+                raise BrokenServiceException(f"Unexpected redirect after {action}: {resp.headers['Location']}")
+
+    def register_user(self, email: str, password: str, image_path: str = "", use_image: bool = False):
+        if use_image:
+            filename = "/tmp/" + secrets.token_urlsafe(10) + ".png"
+            if image_path:
+                filename = image_path
+            else:
+                self.generate_random_image(filename)
+            with open(filename, 'rb') as verification_image:
+                resp = self.http_post("/auth/signup",
+                                      data={
+                                          "email": email,
+                                          "password": password
+                                      },
+                                      files={
+                                          "image": verification_image
+                                      },
+                                      allow_redirects=False
+                                      )
         else:
-            self.generate_random_image(filename)
-        with open(filename, 'rb') as verification_image:
             resp = self.http_post("/auth/signup",
                                   data={
                                       "email": email,
                                       "password": password
                                   },
-                                  files={
-                                      "image": verification_image
-                                  })
-        if resp.status_code != 303:
-            raise EnoException(f"Unexpected status code while registering user: {resp.status_code}")
+                                  allow_redirects=False
+                                  )
+        self.check_response(resp, 303, self.POSTS_PAGE, "registering user")
 
     def login_user(self, email: str, password: str):
         resp = self.http_post("/auth/login",
@@ -88,8 +108,22 @@ class ActivitytrackerChecker(BaseChecker):
                                   "email": email,
                                   "password": password
                               })
-        if resp.status_code != 303:
-            raise EnoException(f"Unexpected status code while registering user: {resp.status_code}")
+        self.check_response(resp, 303, self.POSTS_PAGE, "logging in user")
+
+    def create_post(self, contents, visibility='public', protected=False):
+        resp = self.http_post('/posts/insert', files={
+            "body": contents,
+            "visibility": visibility,
+            "protected": "true" if protected else "false"
+        },
+                              allow_redirects=False)
+        self.check_response(resp, 303, self.POSTS_PAGE, "creating posts")
+
+    def add_friend(self, email):
+        resp = self.http_post('/friends/insert', files={
+            "email": email
+        })
+        self.check_response(resp, 303, self.POSTS_PAGE, "adding friend")
 
     @staticmethod
     def generate_matching_emails(person1, person2, company):
@@ -138,30 +172,26 @@ class ActivitytrackerChecker(BaseChecker):
             self.register_user(email, password)
 
 
-            self.generate_random_posts(random.randint(0, 3),
-                                       data={"firstname": firstname, "lastname": lastname, "company": company,
-                                             "jobtitle": jobtitle, "password": password,
-                                             "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
+            # self.generate_random_posts(random.randint(0, 3),
+            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
+            #                                  "jobtitle": jobtitle, "password": password,
+            #                                  "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
 
-            self.http_post('/posts/insert', files={
-                "body": f"I love working here at {company} as a {jobtitle}. We even have our own gym! My boss {boss_firstname} {boss_lastname} is great, and I'll get a promotion soon! Come work here as well! Cheers, {firstname} {lastname}",
-                "visibility": "public",
-                "protected": "true"
-            })
+            self.create_post(f"I love working here at {company} as a {jobtitle}. We even have our own gym! My boss {boss_firstname} {boss_lastname} is great, and I'll get a promotion soon! Come work here as well! Cheers, {firstname} {lastname}",
+                             "public",
+                             True)
 
-            self.generate_random_posts(random.randint(0, 3),
-                                       data={"firstname": firstname, "lastname": lastname, "company": company,
-                                             "jobtitle": jobtitle, "password": password,
-                                             "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
+            # self.generate_random_posts(random.randint(0, 3),
+            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
+            #                                  "jobtitle": jobtitle, "password": password,
+            #                                  "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
 
-            self.http_get('/auth/logout')
+            # self.http_get('/auth/logout')
             self.register_user(boss_email, boss_password)
-            self.http_post('/posts/insert', files={
-                "body": self.flag,
-                "visibility": "private",
-                "protected": "true"
-            })
-            self.http_get('/auth/logout')
+            self.create_post(self.flag,
+                             "private",
+                             True)
+            # self.http_get('/auth/logout')
 
             # Save the generated values for the associated getflag() call.
             self.chain_db = {
@@ -177,23 +207,21 @@ class ActivitytrackerChecker(BaseChecker):
             password = barnum.create_pw(length=10)
             email = barnum.create_email(name=(firstname, lastname)).lower()
 
-            self.register_user(email, password)
+            self.register_user(email, password, use_image=True)
 
-            self.generate_random_posts(random.randint(0, 3),
-                                       data={"firstname": firstname, "lastname": lastname, "company": company,
-                                             "jobtitle": jobtitle, "password": password}, templates='simple')
+            # self.generate_random_posts(random.randint(0, 3),
+            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
+            #                                  "jobtitle": jobtitle, "password": password}, templates='simple')
 
-            self.http_post('/posts/insert', files={
-                "body": f"A friend of mine keeps posting their passwords! LOL!",
-                "visibility": "public",
-                "protected": "true"
-            })
+            self.create_post(f"A friend of mine keeps posting their passwords! LOL!",
+                             "public",
+                             True)
 
-            self.generate_random_posts(random.randint(0, 3),
-                                       data={"firstname": firstname, "lastname": lastname, "company": company,
-                                             "jobtitle": jobtitle, "password": password}, templates='simple')
+            # self.generate_random_posts(random.randint(0, 3),
+            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
+            #                                  "jobtitle": jobtitle, "password": password}, templates='simple')
 
-            self.http_get('/auth/logout')
+            # self.http_get('/auth/logout')
 
             original_email = email
             firstname, lastname = barnum.create_name()
@@ -201,7 +229,7 @@ class ActivitytrackerChecker(BaseChecker):
             checker_password = barnum.create_pw(length=10)
 
             self.register_user(checker_email, checker_password)
-            self.http_get('/auth/logout')
+            # self.http_get('/auth/logout')
 
             firstname, lastname = barnum.create_name()
             company = barnum.create_company_name()
@@ -211,20 +239,14 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.http_post('/posts/insert', files={
-                "body": self.flag,
-                "visibility": "friends",
-                "protected": "true"
-            })
+            self.create_post(self.flag,
+                             "friends",
+                             True)
 
-            self.http_post('/friends/insert', files={
-                "email": original_email
-            })
-            self.http_post('/friends/insert', files={
-                "email": checker_email
-            })
+            self.add_friend(original_email)
+            self.add_friend(checker_email)
 
-            self.http_get('/auth/logout')
+            # self.http_get('/auth/logout')
 
             # Save the generated values for the associated getflag() call.
             self.chain_db = {
@@ -247,29 +269,25 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.generate_random_posts(random.randint(0, 3),
-                                       data={"firstname": firstname, "lastname": lastname, "company": company,
-                                             "jobtitle": jobtitle, "password": password,
-                                             "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
+            # self.generate_random_posts(random.randint(0, 3),
+            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
+            #                                  "jobtitle": jobtitle, "password": password,
+            #                                  "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
 
-            self.http_post('/posts/insert', files={
-                "body": "Private posts are useful to save passwords ^^ Nice ^^",
-                "visibility": "public",
-                "protected": "true"
-            })
+            self.create_post(f"Private posts are useful to save passwords ^^ Nice ^^",
+                             "public",
+                             True)
 
-            self.http_post('/posts/insert', files={
-                "body": self.flag,
-                "visibility": "private",
-                "protected": "true"
-            })
+            self.create_post(self.flag,
+                             "private",
+                             True)
 
-            self.generate_random_posts(random.randint(0, 3),
-                                       data={"firstname": firstname, "lastname": lastname, "company": company,
-                                             "jobtitle": jobtitle, "password": password,
-                                             "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
+            # self.generate_random_posts(random.randint(0, 3),
+            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
+            #                                  "jobtitle": jobtitle, "password": password,
+            #                                  "boss_firstname": boss_firstname, "boss_lastname": boss_lastname})
 
-            self.http_get('/auth/logout')
+            # self.http_get('/auth/logout')
 
 
             # Save the generated values for the associated getflag() call.
@@ -280,11 +298,15 @@ class ActivitytrackerChecker(BaseChecker):
         else:
             raise EnoException("Wrong variant_id provided")
 
+    def check_page(self, page):
+        resp = self.http_get(f"/posts/view/{page}")
+        self.check_response(resp, 200, "", "getting posts")
+        return html.unescape(resp.text)
+
     def check_pages(self, flag):
         page = 0
         while 1:
-            resp = self.http_get(f"/posts/view/{page}")
-            t = html.unescape(resp.text)
+            t = self.check_page(page)
             if "Activities by" not in t:
                 return ""
             if flag in t:
@@ -328,7 +350,6 @@ class ActivitytrackerChecker(BaseChecker):
             else:
                 resp = self.check_mine()
 
-            self.http_get('/auth/logout')
             assert_in(
                 self.flag, resp, "Resulting flag was found to be incorrect"
             )
@@ -390,11 +411,9 @@ class ActivitytrackerChecker(BaseChecker):
                         body = random.choice(posts).format(**data) if data else random.choice(posts)
                     else:
                         body = self.generate_workout()
-                    self.http_post('/posts/insert', files={
-                        "body": body,
-                        "visibility": "public" if p else "private",
-                        "protected": "true" if random.random() < 0.1 else "false"
-                    })
+                    self.create_post(body,
+                                     "public" if p else "private",
+                                     random.random() < 0.1)
                     break
                 except:
                     pass
@@ -421,19 +440,18 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            self.generate_random_posts(n=random.randint(0, 3),
-                                       data={"firstname": firstname, "lastname": lastname, "company": company,
-                                             "jobtitle": jobtitle, "password": password}, templates="simple")
-            self.http_post('/posts/insert', files={
-                "body": text,
-                "visibility": "public" if self.variant_id == 0 else "private",
-                "protected": "true"
-            })
-            self.generate_random_posts(n=random.randint(0, 3),
-                                       data={"firstname": firstname, "lastname": lastname, "company": company,
-                                             "jobtitle": jobtitle, "password": password}, templates="simple")
+            # self.generate_random_posts(n=random.randint(0, 3),
+            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
+            #                                  "jobtitle": jobtitle, "password": password}, templates="simple")
+            self.create_post(text,
+                             "public" if self.variant_id == 0 else "private",
+                             True)
 
-            self.http_get('/auth/logout')
+            # self.generate_random_posts(n=random.randint(0, 3),
+            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
+            #                                  "jobtitle": jobtitle, "password": password}, templates="simple")
+
+            # self.http_get('/auth/logout')
             self.chain_db = {
                 "username": email,
                 "password": password,
@@ -465,14 +483,14 @@ class ActivitytrackerChecker(BaseChecker):
                 raise BrokenServiceException("Previous putflag failed.")
 
             # Let´s obtain our note.
-            resp = self.check_pages(text)
-
-            assert_in(
-                text, resp, "Resulting flag was found to be incorrect"
-            )
-            assert_in(
-                username, resp, "Posts don't contain correct usernames"
-            )
+            # resp = self.check_pages(text)
+            #
+            # assert_in(
+            #     text, resp, "Public posts are not working"
+            # )
+            # assert_in(
+            #     username, resp, "Public posts are not working"
+            # )
         elif self.variant_id == 1:
             # private post
             try:
@@ -488,12 +506,12 @@ class ActivitytrackerChecker(BaseChecker):
             # Let´s obtain our note.
             resp = self.check_mine()
 
-            self.http_get('/auth/logout')
+            # self.http_get('/auth/logout')
             assert_in(
-                text, resp, "Resulting flag was found to be incorrect"
+                text, resp, "Private posts are not working"
             )
             assert_in(
-                username, resp, "Resulting flag was found to be incorrect"
+                username, resp, "Private posts are not working"
             )
         else:
             raise EnoException("Wrong variant_id provided")
@@ -511,48 +529,42 @@ class ActivitytrackerChecker(BaseChecker):
             # Check edit functionality
             firstname, lastname = barnum.create_name()
             password = barnum.create_pw(length=10)
-            email = barnum.create_email(name=(firstname, lastname))
+            email = barnum.create_email(name=(firstname, lastname)).lower()
             text = secrets.token_urlsafe(128)
 
             self.register_user(email, password)
 
-            self.http_post('/posts/insert', files={
-                "body": text,
-                "visibility": "public" if self.variant_id == 0 else "private",
-                "protected": "false"
-            })
+            self.create_post(text,
+                             "public" if self.variant_id == 0 else "private",
+                             False)
             resp = self.check_mine()
             t = resp.split("\">Edit</a>")[0]
             url = t.split("href=\"")[-1]
 
             resp = self.http_get(url)
-            self.http_get('/auth/logout')
-            assert_in(text, html.unescape(resp.text))
+            assert_in(text, html.unescape(resp.text), "Post editing does not work")
         elif self.variant_id == 1:
             # check delete functionality
             firstname, lastname = barnum.create_name()
             password = barnum.create_pw(length=10)
-            email = barnum.create_email(name=(firstname, lastname))
+            email = barnum.create_email(name=(firstname, lastname)).lower()
 
             self.register_user(email, password)
 
             random_validation_text = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(64))
 
-            self.http_post('/posts/insert', files={
-                "body": random_validation_text,
-                "visibility": "public",
-                "protected": "false"
-            })
+            self.create_post(random_validation_text,
+                             "public",
+                             False)
             resp = html.unescape(self.http_get('/posts/my').text)
             assert_in(random_validation_text, resp)
             t = resp.split("\">Delete</a>")[0]
             url = t.split("href=\"")[-1]
             self.http_get(url)
-            resp = html.unescape(self.http_get('/posts/my').text)
-            self.http_get('/auth/logout')
+            resp = self.check_mine()
             if random_validation_text in resp:
                 raise BrokenServiceException(
-                    "Received unexpected response.",
+                    "Post deletion does not work.",
                     internal_message=f"{random_validation_text} is in {resp}",
                 )
         elif self.variant_id == 2:
@@ -678,7 +690,7 @@ class ActivitytrackerChecker(BaseChecker):
                     image_name = f"/tmp/tmp.png"
                     self.generate_random_image(image_name)
                     print(email)
-                    self.register_user(f"{email}.{secrets.token_urlsafe(2)}.{secrets.token_urlsafe(2)}.{secrets.token_urlsafe(2)}", password_my, image_name)
+                    self.register_user(f"{email}.{secrets.token_urlsafe(2)}.{secrets.token_urlsafe(2)}.{secrets.token_urlsafe(2)}", password_my, image_name, True)
                     self.http_get('/auth/logout')
                     with open(image_name, 'rb') as image:
                         self.http_post('/auth/forgot', data={

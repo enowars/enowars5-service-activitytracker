@@ -1,4 +1,3 @@
-use diesel::pg::PgConnection;
 use crate::schema::friends;
 use crate::diesel::RunQueryDsl;
 use crate::diesel::prelude::*;
@@ -23,22 +22,22 @@ pub struct NewFriend {
 }
 
 
-pub fn create_friend(conn: &PgConnection, sender_id: i32, receiver_id: i32) -> Friend {
+pub async fn create_friend(conn: &crate::PgDieselDbConn, sender_id: i32, receiver_id: i32) -> Friend {
     let new_friend = NewFriend {
         sender_id, receiver_id
     };
 
-    diesel::insert_into(friends::table)
+    conn.run(move |c| diesel::insert_into(friends::table)
         .values(&new_friend)
-        .get_result(conn)
+        .get_result(c)).await
         .expect("Error creating friendship.")
 }
 
 
-pub fn get_all_friends(conn: &PgConnection, your_id: i32) -> Vec<i32> {
-    friends::table
+pub async fn get_all_friends(conn: &crate::PgDieselDbConn, your_id: i32) -> Vec<i32> {
+    conn.run(move |c| friends::table
         .select(dsl::sender_id)
         .filter(dsl::receiver_id.eq(your_id))
-        .get_results(conn)
+        .get_results(c)).await
         .expect("Error getting friends.")
 }

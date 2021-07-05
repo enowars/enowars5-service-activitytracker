@@ -24,6 +24,7 @@ r2d2 = "0.8.9"
 scheduled-thread-pool = "0.2.5"
 futures = "0.3"
 tokio = "1.8.0"
+tokio-diesel = "0.3.0"
 
 [dependencies.rocket_dyn_templates]
 version = "0.1.0-rc.1"
@@ -33,3 +34,8 @@ features = ["tera"]
 git = 'https://github.com/tvallotton/rocket_auth'
 branch = 'master'
 features = ["postgres-db"]
+
+[dependencies.rocket_sync_db_pools]
+version = "0.1.0-dev"
+default-features = false
+features = ["diesel_postgres_pool"]

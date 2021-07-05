@@ -8,11 +8,10 @@ use rocket_auth::User;
 use serde_json::json;
 use crate::models::users::get_user_id;
 use crate::models::friends::create_friend;
-use crate::dbpool;
 
 
 #[get("/friends")]
-pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
+pub async fn new(user: User, flash: Option<FlashMessage<'_>>) -> Template {
     let (m_name, m_msg) = match flash {
         Some(ref msg) => (msg.kind(), msg.message()),
         None => ("success", "Add a friend!")
@@ -25,17 +24,17 @@ pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
 }
 
 #[derive(Debug, FromForm)]
-pub struct EmailForm<'v> {
-    email: &'v str
+pub struct EmailForm {
+    email: String
 }
 
 #[post("/friends/insert", data = "<post_data>")]
-pub fn insert(user: User, conn: dbpool::DbConn, post_data: Form<EmailForm<'_>>) -> Flash<Redirect> {
-    let other = get_user_id(&*conn, post_data.email);
-    create_friend(&*conn, user.id(), other);
+pub async fn insert(user: User, conn: crate::PgDieselDbConn, post_data: Form<EmailForm>) -> Flash<Redirect> {
+    let other = get_user_id(&conn, post_data.into_inner().email).await;
+    create_friend(&conn, user.id(), other).await;
 
     Flash::success(
-        Redirect::to("/posts"),
+        Redirect::to("/posts/view/0"),
         "Success! You added a friend! They can now see your activity!",
     )
 }

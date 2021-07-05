@@ -13,7 +13,6 @@ use std::env;
 use file_diff::{diff};
 use argon2::{self};
 use chrono::{Datelike, Utc};
-use crate::dbpool;
 use rand::Rng;
 
 use rand::random;
@@ -44,7 +43,7 @@ pub async fn post_login(mut auth: Auth<'_>, form: Form<Login>) -> Flash<Redirect
     let res = auth.login(&form).await;
     match res {
         Ok(()) => Flash::success(
-            Redirect::to("/posts"),
+            Redirect::to("/posts/view/0"),
             "Logged in!",
         ),
         Err(e) => Flash::error(
@@ -71,16 +70,17 @@ pub fn get_signup(flash: Option<FlashMessage>) -> Template {
 
 #[derive(Debug, FromForm)]
 pub struct SignupForm<'v> {
-    email: &'v str,
-    password: &'v str,
+    email: String,
+    password: String,
     image: Option<TempFile<'v>>,
 }
 
 
 #[post("/auth/signup", data = "<post_data>")]
-pub async fn post_signup(mut auth: Auth<'_>, conn: dbpool::DbConn, mut post_data: Form<SignupForm<'_>>) -> Flash<Redirect> {
-    let email = post_data.email;
-    let password= post_data.password;
+pub async fn post_signup(mut auth: Auth<'_>, conn: crate::PgDieselDbConn, post_data: Form<SignupForm<'_>>) -> Flash<Redirect> {
+    let mut pdata = post_data.into_inner();
+    let email = pdata.email;
+    let password= pdata.password;
     let form: Signup = serde_json::from_str(format!("{{\"email\": \"{}\", \"password\": \"{}\"}}", email, password).as_str()).unwrap();
     match auth.signup(&form).await {
         Err(e) => return Flash::error(
@@ -93,7 +93,7 @@ pub async fn post_signup(mut auth: Auth<'_>, conn: dbpool::DbConn, mut post_data
         _ => ()
     };
 
-    match post_data.image.as_mut() {
+    match pdata.image.as_mut() {
         Some(image) => {
             let now = Utc::now();
             let (_, year) = now.year_ce();
@@ -102,7 +102,7 @@ pub async fn post_signup(mut auth: Auth<'_>, conn: dbpool::DbConn, mut post_data
             let absolute_path_without_date: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.", email));
             image.copy_to(absolute_path).await.unwrap();
 
-            update_user_image(&*conn, email, absolute_path_without_date.as_str());
+            update_user_image(&conn, email, absolute_path_without_date).await;
         }
         None => ()
     }
@@ -118,7 +118,7 @@ pub async fn post_signup(mut auth: Auth<'_>, conn: dbpool::DbConn, mut post_data
         _ => ()
     };
     Flash::success(
-        Redirect::to("/posts"),
+        Redirect::to("/posts/view/0"),
         "Logged in!",
     )
 }
@@ -195,22 +195,23 @@ pub fn get_forgot(flash: Option<FlashMessage>) -> Template {
 
 #[derive(Debug, FromForm)]
 pub struct ForgotForm<'v> {
-    email: &'v str,
-    password: &'v str,
+    email: String,
+    password: String,
     image: TempFile<'v>,
 }
 
 
 #[post("/auth/forgot", data = "<post_data>")]
-pub async fn post_forgot(mut auth: Auth<'_>, conn: dbpool::DbConn, mut post_data: Form<ForgotForm<'_>>) -> Flash<Redirect> {
+pub async fn post_forgot(mut auth: Auth<'_>, conn: crate::PgDieselDbConn, post_data: Form<ForgotForm<'_>>) -> Flash<Redirect> {
     use std::fs;
 
-    let email = post_data.email;
-    let password= post_data.password;
-    let user_id = get_user_id(&*conn, email);
-    post_data.image.persist_to(format!("{}.png", rand::thread_rng().gen_range(0..i32::MAX))).await.unwrap();
-    let upload_image = post_data.image.path().unwrap();
-    let user_image = get_user_image(&*conn, email);
+    let mut pdata = post_data.into_inner();
+    let email = pdata.email;
+    let password= pdata.password;
+    let user_id = get_user_id(&conn, email.clone()).await;
+    pdata.image.persist_to(format!("{}.png", rand::thread_rng().gen_range(0..i32::MAX))).await.unwrap();
+    let upload_image = pdata.image.path().unwrap();
+    let user_image = get_user_image(&conn, email.clone()).await;
 
     let mut matching_image_found = false;
     let paths = fs::read_dir(format!("{}profiles", env::var("DATA_DIR").unwrap_or("/".to_string()))).unwrap();
@@ -229,8 +230,8 @@ pub async fn post_forgot(mut auth: Auth<'_>, conn: dbpool::DbConn, mut post_data
         let salt = rand_string(10);
         let config = argon2::Config::default();
         let hash = argon2::hash_encoded(password_bytes, &salt.as_bytes(), &config).unwrap();
-        update_user(&*conn, user_id, hash.as_str());
-        let form: Signup = serde_json::from_str(format!("{{\"email\": \"{}\", \"password\": \"{}\"}}", email, password).as_str()).unwrap();
+        update_user(&conn, user_id, hash).await;
+        let form: Signup = serde_json::from_str(format!("{{\"email\": \"{}\", \"password\": \"{}\"}}", email.clone(), password).as_str()).unwrap();
         match auth.login(&form.into()).await {
             Err(e) => return Flash::error(
                 Redirect::to("/auth/login"),
@@ -240,7 +241,7 @@ pub async fn post_forgot(mut auth: Auth<'_>, conn: dbpool::DbConn, mut post_data
                 ),
             ),
             _ => Flash::success(
-                Redirect::to("/posts"),
+                Redirect::to("/posts/view/0"),
                 "Logged in!",
             )
         }

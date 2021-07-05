@@ -1,7 +1,6 @@
 use diesel::prelude::*;
 use crate::schema::*;
 use crate::models::posts::*;
-use crate::dbpool;
 
 use rocket_dyn_templates::Template;
 use rocket::fs::TempFile;
@@ -34,7 +33,7 @@ fn div_up(a: usize, b: usize) -> usize {
 
 
 #[get("/posts/view/<page>")]
-pub fn get_posts(user: Option<User>, conn: dbpool::DbConn, flash: Option<FlashMessage>, page: usize) -> Template {
+pub async fn get_posts(user: Option<User>, conn: crate::PgDieselDbConn, flash: Option<FlashMessage<'_>>, page: usize) -> Template {
     let user_id = match user {
         Some(ref u) => u.id(),
         None => -1,
@@ -43,9 +42,9 @@ pub fn get_posts(user: Option<User>, conn: dbpool::DbConn, flash: Option<FlashMe
         user_id,
         PAGE_SIZE,
         page,
-        &*conn
-    );
-    let mut max_users = UsersAndPosts::post_count(user_id, &*conn) as usize;
+        &conn
+    ).await;
+    let mut max_users = UsersAndPosts::post_count(user_id, &conn).await as usize;
     if max_users < 1 {
         max_users = 1;
     }
@@ -67,10 +66,10 @@ pub fn get_posts(user: Option<User>, conn: dbpool::DbConn, flash: Option<FlashMe
 }
 
 #[get("/posts/my")]
-pub fn my_posts(user: User, conn: dbpool::DbConn, flash: Option<FlashMessage>) -> Template {
+pub async fn my_posts(user: User, conn: crate::PgDieselDbConn, flash: Option<FlashMessage<'_>>) -> Template {
     let mut uap = UsersAndPosts::load_mine(user.id(),
-                                           &*conn
-    );
+                                           &conn
+    ).await;
     uap.retain(|u| u.0.id == user.id());
 
     Template::render("posts/post_list", json!({
@@ -88,10 +87,10 @@ pub fn my_posts(user: User, conn: dbpool::DbConn, flash: Option<FlashMessage>) -
 }
 
 #[get("/posts/friends")]
-pub fn friends_posts(user: User, conn: dbpool::DbConn, flash: Option<FlashMessage>) -> Template {
+pub async fn friends_posts(user: User, conn: crate::PgDieselDbConn, flash: Option<FlashMessage<'_>>) -> Template {
     let uap = UsersAndPosts::load_friends(user.id(),
-                                          &*conn
-    );
+                                          &conn
+    ).await;
 
     Template::render("posts/post_list", json!({
             "data": uap,
@@ -122,18 +121,19 @@ pub fn new(user: User, flash: Option<FlashMessage>) -> Template {
 
 #[derive(Debug, FromForm)]
 pub struct PostForm<'v> {
-    body: &'v str,
-    visibility: &'v str,
-    protected: &'v str,
+    body: String,
+    visibility: String,
+    protected: String,
     image: Option<TempFile<'v>>,
 }
 
 #[post("/posts/insert", data = "<post_data>")]
-pub async fn insert(user: User, conn: dbpool::DbConn, mut post_data: Form<PostForm<'_>>) -> Flash<Redirect> {
-    let body = post_data.body;
-    let visibility = post_data.visibility;
-    let protected = post_data.protected == "true";
-    let image = match post_data.image.as_mut() {
+pub async fn insert(user: User, conn: crate::PgDieselDbConn, post_data: Form<PostForm<'_>>) -> Flash<Redirect> {
+    let mut pdata = post_data.into_inner();
+    let body = pdata.body;
+    let visibility = pdata.visibility;
+    let protected = pdata.protected == "true";
+    let image = match pdata.image.as_mut() {
         Some(img) => {
             handle_image(img.borrow_mut()).await
         }
@@ -141,33 +141,33 @@ pub async fn insert(user: User, conn: dbpool::DbConn, mut post_data: Form<PostFo
     };
 
     /* Insert data into database */
-    create_post(&*conn,
+    create_post(conn,
                 body,
                 visibility,
                 image,
                 user.id(),
                 protected
-    );
+    ).await;
 
     Flash::success(
-        Redirect::to("/posts"),
+        Redirect::to("/posts/view/0"),
         "Success! You created a new activity!",
     )
 }
 
 
 #[get("/posts/update/<email>/<id>")]
-pub fn update(user: User, conn: dbpool::DbConn, flash: Option<FlashMessage>, email: String, id: i32) -> Template {
+pub async fn update(user: User, conn: crate::PgDieselDbConn, flash: Option<FlashMessage<'_>>, email: String, id: i32) -> Template {
     /* checks whether the user has rights to edit the post */
-    let email_id: i32 = users::table
+    let email_id: i32 = conn.run(move |c| users::table
         .select(users::id)
         .filter(users::email.eq(email))
-        .first(&*conn).expect("No such user!");
-    let post_data = posts::table
+        .first(c)).await.expect("No such user!");
+    let post_data = conn.run(move |c| posts::table
         .select(posts::all_columns)
         .filter(posts::user_post_count.eq(id))
         .filter(posts::user_id.eq(email_id))
-        .load::<Post>(&*conn);
+        .load::<Post>(c)).await;
 
     let (post, err) = match post_data {
         Ok(post) => (post, "".to_string()),
@@ -208,85 +208,85 @@ async fn handle_image(image: &mut TempFile<'_>) -> Option<String> {
 #[derive(Debug, FromForm)]
 pub struct PostEditForm<'v> {
     id: i32,
-    body: Option<&'v str>,
-    visibility: Option<&'v str>,
+    body: Option<String>,
+    visibility: Option<String>,
     image: Option<TempFile<'v>>,
 }
 
 
 #[post("/posts/update", data = "<post_data>")]
 #[allow(unused_variables)] // variable user is needed for permissions handler
-pub async fn process_update(user: User, conn: dbpool::DbConn, content_type: &ContentType, mut post_data: Form<PostEditForm<'_>>) -> Flash<Redirect> {
-
-    let id = post_data.id;
-    let p = posts::table.filter(posts::id.eq(id)).first::<Post>(&*conn).expect("Error updating post.");
+pub async fn process_update(user: User, conn: crate::PgDieselDbConn, content_type: &ContentType, post_data: Form<PostEditForm<'_>>) -> Flash<Redirect> {
+    let mut pdata = post_data.into_inner();
+    let id = pdata.id;
+    let p = conn.run(move |c| posts::table.filter(posts::id.eq(id)).first::<Post>(c)).await.expect("Error updating post.");
     if p.protected {
         return Flash::error(
-            Redirect::to("/posts"),
+            Redirect::to("/posts/view/0"),
             "This post is protected and cannot be updated."
         );
     }
     if p.user_id != user.id() {
         return Flash::error(
-            Redirect::to("/posts"),
+            Redirect::to("/posts/view/0"),
             "You cannot update this post."
         );
     }
 
-    let body = post_data.body;
-    let visibility = post_data.visibility;
+    let body = pdata.body;
+    let visibility = pdata.visibility;
 
-    let image = match post_data.image.as_mut() {
+    let image = match pdata.image.as_mut() {
         Some(img) => handle_image(img.borrow_mut()).await,
         None => None
     };
 
 
-    update_post(&*conn,
+    update_post(conn,
                 id,
                 body,
                 visibility,
                 image
-    );
+    ).await;
     Flash::success(
-        Redirect::to("/posts"),
+        Redirect::to("/posts/view/0"),
         "Success! Activity updated!",
     )
 }
 
 #[get("/posts/delete/<email>/<id>")]
 #[allow(unused_variables)] // variable user is needed for permissions handler
-pub fn delete(user: User, conn: dbpool::DbConn, email: String, id: i32) -> Flash<Redirect> {
-    let email_id: i32 = users::table
+pub async fn delete(user: User, conn: crate::PgDieselDbConn, email: String, id: i32) -> Flash<Redirect> {
+    let email_id: i32 = conn.run(move |c| users::table
         .select(users::id)
         .filter(users::email.eq(email))
-        .first(&*conn).expect("No such user!");
-    let post: Post = posts::table
+        .first(c)).await.expect("No such user!");
+    let post: Post = conn.run(move |c| posts::table
         .filter(posts::user_id.eq(email_id))
         .filter(posts::user_post_count.eq(id))
-        .first(&*conn).expect("No such activity!");
+        .first(c)).await.expect("No such activity!");
     if post.protected {
         return Flash::error(
-            Redirect::to("/posts"),
+            Redirect::to("/posts/view/0"),
             "This post is protected and cannot be deleted."
         );
     }
     if post.user_id != user.id() {
         return Flash::error(
-            Redirect::to("/posts"),
+            Redirect::to("/posts/view/0"),
             "Cannot delete post."
         );
     }
     delete_post(
-        &*conn,
+        conn,
         post.id
-    );
-    Flash::success(Redirect::to("/posts"), "The activity was deleted.")
+    ).await;
+    Flash::success(Redirect::to("/posts/view/0"), "The activity was deleted.")
 }
 
 // Clean up every once in a while
 #[get("/posts/delete_old")]
-pub fn delete_old(conn: dbpool::DbConn) -> Flash<Redirect> {
-    delete_old_users(&*conn);
-    Flash::success(Redirect::to("/posts"), "Old stuff deleted.")
+pub async fn delete_old(conn: crate::PgDieselDbConn) -> Flash<Redirect> {
+    delete_old_users(&conn).await;
+    Flash::success(Redirect::to("/posts/view/0"), "Old stuff deleted.")
 }

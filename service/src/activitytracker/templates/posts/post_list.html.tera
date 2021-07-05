@@ -44,7 +44,7 @@
                     <div class="card-body">
                         {{post.body}}
                         {% if post.image %}
-                            <img class="img-fluid float-right" src="{{post.image}}" alt="an image of the post" style="width: 200px">
+                            <img class="img-fluid float-right" src="/posts/{{post.image}}" alt="an image of the post" style="width: 200px">
                         {% endif %}
                     </div>
                 </div>
