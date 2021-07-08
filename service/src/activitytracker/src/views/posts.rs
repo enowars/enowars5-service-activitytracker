@@ -187,7 +187,11 @@ pub async fn update(user: User, conn: crate::PgDieselDbConn, flash: Option<Flash
 
 
 async fn handle_image(image: &mut TempFile<'_>) -> Option<String> {
-    let file_name = image.raw_name().unwrap().dangerous_unsafe_unsanitized_raw().as_str();
+    let file_name = match image.name() {
+        Some(s) => s,
+        None => return None
+    };
+
     let path = format!("imgs/{}", file_name);
 
     let forbidden_chars = &"#%&{}\\<>*?/ $!'\":@+`|="[..]; // forbidden characters for filenames

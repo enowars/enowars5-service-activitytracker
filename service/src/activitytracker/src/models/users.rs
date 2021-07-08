@@ -70,14 +70,6 @@ pub async fn get_user_id(conn: &crate::PgDieselDbConn, email: String) -> i32 {
         .expect("No such user.")
 }
 
-pub async fn get_user_image(conn: &crate::PgDieselDbConn, email: String) -> String {
-    conn.run(move |c| users::table
-        .select(dsl::verification_image)
-        .filter(dsl::email.eq(email))
-        .first(c)).await
-        .expect("No such user.")
-}
-
 pub async fn update_user(conn: &crate::PgDieselDbConn, id: i32, password: String) -> User {
     conn.run(move |c| diesel::update(dsl::users.find(id))
         .set(dsl::password.eq(password))

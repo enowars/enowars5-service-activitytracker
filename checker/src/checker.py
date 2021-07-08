@@ -159,12 +159,13 @@ class ActivitytrackerChecker(BaseChecker):
         if self.variant_id == 0:
             # First we need to register a user
             firstname, lastname = barnum.create_name()
+            lastname += str(random.randint(1, 1000))
             company = barnum.create_company_name()
             jobtitle = barnum.create_job_title()
             password = barnum.create_pw(length=10)
             email = barnum.create_email(name=(firstname, lastname)).lower()
 
-            self.register_user(email, password, use_image=True)
+            self.register_user(email, password)
 
             # self.generate_random_posts(random.randint(0, 3),
             #                            data={"firstname": firstname, "lastname": lastname, "company": company,
@@ -181,7 +182,7 @@ class ActivitytrackerChecker(BaseChecker):
             # self.http_get('/auth/logout')
 
             original_email = email
-            firstname, lastname = barnum.create_name()
+            firstname, lastname = secrets.token_urlsafe(10), secrets.token_urlsafe(10)
             checker_email = barnum.create_email(name=(firstname, lastname)).lower()
             checker_password = barnum.create_pw(length=10)
 
@@ -189,6 +190,7 @@ class ActivitytrackerChecker(BaseChecker):
             # self.http_get('/auth/logout')
 
             firstname, lastname = barnum.create_name()
+            lastname += str(random.randint(1, 1000))
             company = barnum.create_company_name()
             jobtitle = barnum.create_job_title()
             password = barnum.create_pw(length=10)
@@ -211,6 +213,11 @@ class ActivitytrackerChecker(BaseChecker):
                 "password": checker_password,
             }
         elif self.variant_id == 1:
+            firstname, lastname = secrets.token_urlsafe(10), secrets.token_urlsafe(10)
+            checker_email = barnum.create_email(name=(firstname, lastname)).lower()
+            checker_password = barnum.create_pw(length=10)
+            self.register_user(checker_email, checker_password)
+
             # First we need to register a user
             firstname, lastname = barnum.create_name()
             company = barnum.create_company_name()
@@ -236,8 +243,10 @@ class ActivitytrackerChecker(BaseChecker):
                              True)
 
             self.create_post(self.flag,
-                             "private",
+                             "friends",
                              True)
+
+            self.add_friend(checker_email)
 
             # self.generate_random_posts(random.randint(0, 3),
             #                            data={"firstname": firstname, "lastname": lastname, "company": company,
@@ -249,8 +258,8 @@ class ActivitytrackerChecker(BaseChecker):
 
             # Save the generated values for the associated getflag() call.
             self.chain_db = {
-                "username": email,
-                "password": password,
+                "username": checker_email,
+                "password": checker_password,
             }
         else:
             raise EnoException("Wrong variant_id provided")
@@ -302,10 +311,7 @@ class ActivitytrackerChecker(BaseChecker):
             self.login_user(username, password)
 
             # Let´s obtain our note.
-            if self.variant_id == 0:
-                resp = self.check_friends()
-            else:
-                resp = self.check_mine()
+            resp = self.check_friends()
 
             assert_in(
                 self.flag, resp, "Resulting flag was found to be incorrect"
@@ -397,16 +403,16 @@ class ActivitytrackerChecker(BaseChecker):
 
             self.register_user(email, password)
 
-            # self.generate_random_posts(n=random.randint(0, 3),
-            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
-            #                                  "jobtitle": jobtitle, "password": password}, templates="simple")
+            self.generate_random_posts(n=random.randint(5, 10),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle, "password": password}, templates="simple")
             self.create_post(text,
                              "public" if self.variant_id == 0 else "private",
                              True)
 
-            # self.generate_random_posts(n=random.randint(0, 3),
-            #                            data={"firstname": firstname, "lastname": lastname, "company": company,
-            #                                  "jobtitle": jobtitle, "password": password}, templates="simple")
+            self.generate_random_posts(n=random.randint(5, 10),
+                                       data={"firstname": firstname, "lastname": lastname, "company": company,
+                                             "jobtitle": jobtitle, "password": password}, templates="simple")
 
             # self.http_get('/auth/logout')
             self.chain_db = {
@@ -440,14 +446,14 @@ class ActivitytrackerChecker(BaseChecker):
                 raise BrokenServiceException("Previous putflag failed.")
 
             # Let´s obtain our note.
-            # resp = self.check_pages(text)
-            #
-            # assert_in(
-            #     text, resp, "Public posts are not working"
-            # )
-            # assert_in(
-            #     username, resp, "Public posts are not working"
-            # )
+            resp = self.check_pages(text)
+
+            assert_in(
+                text, resp, "Public posts are not working"
+            )
+            assert_in(
+                username, resp, "Public posts are not working"
+            )
         elif self.variant_id == 1:
             # private post
             try:
