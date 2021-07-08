@@ -1,9 +1,8 @@
 [global]
 keep_alive = 5
-workers = 256
-log = "normal"
+workers = 1024
 secret_key = "eZ8J/CJ2LuGx/lI481zxWK/3BnIy+LYjhwSZnKkdrRY="
 port = 4242
 
 [global.databases]
-pg_diesel = { url = "postgres://diesel:diesel@postgres:5432/diesel", pool_size = 256 }
+pg_diesel = { url = "postgres://diesel:diesel@postgres:5432/diesel", pool_size = 900 }
