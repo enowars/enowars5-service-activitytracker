@@ -95,14 +95,17 @@ pub async fn post_signup(mut auth: Auth<'_>, conn: crate::PgDieselDbConn, post_d
 
     match pdata.image.as_mut() {
         Some(image) => {
-            let now = Utc::now();
-            let (_, year) = now.year_ce();
+            match image.name() {
+                Some (_s) => {let now = Utc::now();
+                    let absolute_path: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.{:02}-{:02}-{:02}.png", email, now.hour(), now.minute(), now.second()));
+                    let absolute_path_without_date: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.", email));
+                    image.copy_to(absolute_path).await.unwrap();
 
-            let absolute_path: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.{}-{:02}-{:02}.png", email, year, now.month(), now.day()));
-            let absolute_path_without_date: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.", email));
-            image.copy_to(absolute_path).await.unwrap();
-
-            update_user_image(&conn, email, absolute_path_without_date).await;
+                    update_user_image(&conn, email, absolute_path_without_date).await;
+                }
+                ,
+                None => ()
+            }
         }
         None => ()
     }
@@ -171,7 +174,7 @@ pub async fn post_addimage(user: User, mut post_data: Form<ImageForm<'_>>) -> Fl
 
     let now = Utc::now();
 
-    let absolute_path: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.{}-{:02}-{:02}.png", email, now.hour(), now.minute(), now.second()));
+    let absolute_path: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.{:02}-{:02}-{:02}.png", email, now.hour(), now.minute(), now.second()));
     post_data.image.copy_to(absolute_path).await.unwrap();
 
     Flash::success(
