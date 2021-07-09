@@ -35,7 +35,7 @@ class ActivitytrackerChecker(BaseChecker):
 
     # EDIT YOUR CHECKER PARAMETERS
     flag_variants = 2
-    noise_variants = 3
+    noise_variants = 5
     havoc_variants = 7
     exploit_variants = 2
     service_name = "activitytracker"
@@ -66,14 +66,19 @@ class ActivitytrackerChecker(BaseChecker):
 
 
     @staticmethod
-    def generate_random_image(filename):
-        im = Image.open('images/profile.png')
+    def generate_random_image(filename, kind="random"):
+        candidates = []
+        for filename_tmp in os.listdir(f"images/{kind}/"):
+            if filename_tmp.endswith(".png") or filename_tmp.endswith(".jpg"):
+                candidates.append(os.path.join(f"images/{kind}/", filename_tmp))
+        im = Image.open(random.choice(candidates)).convert('RGB')
         # im = Image.new('RGB', (30, 30))
         pixels = im.load()
         for x in range(min(30, im.size[0])):
             for y in range(min(30, im.size[1])):
                 pixels[x, y] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-        im.save(filename, format='png')
+        print(f"saving image to {filename}")
+        im.save(filename, format='JPEG')
         return filename
 
     @staticmethod
@@ -83,10 +88,12 @@ class ActivitytrackerChecker(BaseChecker):
         pixels1 = im1.load()
         pixels2 = im2.load()
         if im1.size != im2.size:
+            print(f"Wrong sizes! {im1.size} {im2.size}")
             return False
         for x in range(im1.size[0]):
             for y in range(im2.size[1]):
                 if pixels1[x, y] != pixels2[x, y]:
+                    print(f"1: {pixels1[x, y]} 2: {pixels2[x, y]}")
                     return False
         return True
 
@@ -100,11 +107,11 @@ class ActivitytrackerChecker(BaseChecker):
 
     def register_user(self, email: str, password: str, image_path: str = "", use_image: bool = False):
         if use_image:
-            filename = "/tmp/" + secrets.token_urlsafe(10) + ".png"
+            filename = "/tmp/" + secrets.token_urlsafe(10) + ".jpg"
             if image_path:
                 filename = image_path
             else:
-                self.generate_random_image(filename)
+                self.generate_random_image(filename, kind='profiles')
             with open(filename, 'rb') as verification_image:
                 resp = self.http_post("/auth/signup",
                                       data={
@@ -112,7 +119,7 @@ class ActivitytrackerChecker(BaseChecker):
                                           "password": password
                                       },
                                       files={
-                                          "image": verification_image
+                                          "image": (os.path.basename(filename), verification_image, 'multipart/form-data')
                                       },
                                       allow_redirects=False
                                       )
@@ -404,8 +411,10 @@ class ActivitytrackerChecker(BaseChecker):
                 if nothing is returned, the service status is considered okay.
                 the preferred way to report errors in the service is by raising an appropriate enoexception
         """
+        # post and later retrieve something
+        # 0: public post
+        # 1: private post
         if self.variant_id == 0 or self.variant_id == 1:
-            # A public or private post
             firstname, lastname, email, password = self.generate_userdata()
             company = barnum.create_company_name()
             jobtitle = barnum.create_job_title()
@@ -430,11 +439,12 @@ class ActivitytrackerChecker(BaseChecker):
                 "password": password,
                 "text": text
             }
+        # upload an image in a post and later retrieve it
         elif self.variant_id == 2:
             _, _, email, password = self.generate_userdata()
             self.register_user(email, password)
 
-            image_name = "/tmp/" + secrets.token_urlsafe(16) + ".png"
+            image_name = "/tmp/" + secrets.token_urlsafe(16) + ".jpg"
             self.generate_random_image(image_name)
 
             self.create_post("Look at this cool image!",
@@ -446,6 +456,39 @@ class ActivitytrackerChecker(BaseChecker):
                     "image": i.read(),
                     "image_name": image_name
                 }
+        # upload a progress pic after registration
+        elif self.variant_id == 3:
+            _, _, email, password = self.generate_userdata()
+            self.register_user(email, password)
+
+            image_name = "/tmp/" + secrets.token_urlsafe(16) + ".jpg"
+            self.generate_random_image(image_name, kind='profiles')
+
+            with open(image_name, 'rb') as i:
+                resp = self.http_post('/auth/addimage', files={
+                    'image': (os.path.basename(image_name), i, 'multipart/form-data')
+                })
+                self.check_response(resp, 303, action="add progress pic")
+            with open(image_name, 'rb') as i:
+                self.chain_db = {
+                    "image": i.read(),
+                    "email": email,
+                    "password": password
+                }
+        # upload a progress pic during registration
+        elif self.variant_id == 4:
+            _, _, email, password = self.generate_userdata()
+            image_name = "/tmp/" + secrets.token_urlsafe(16) + ".jpg"
+            self.generate_random_image(image_name, kind='profiles')
+            self.register_user(email, password, image_name, use_image=True)
+
+            with open(image_name, 'rb') as i:
+                self.chain_db = {
+                    "image": i.read(),
+                    "email": email,
+                    "password": password
+                }
+
         else:
             raise EnoException("Wrong variant_id provided")
 
@@ -508,17 +551,42 @@ class ActivitytrackerChecker(BaseChecker):
             except (IndexError, KeyError) as ex:
                 self.debug(f"error getting notes from db: {ex}")
                 raise BrokenServiceException("Previous putnoise failed.")
-            image_name = os.path.basename(image_name)
+            image_name = os.path.basename(image_name)[:-4]  # remove file ending
             resp = self.http_get(f'/posts/imgs/{image_name}')
             self.check_response(resp, 200, action="getting image")
-            new_file = f"/tmp/{secrets.token_urlsafe(20)}.png"
+            new_file = f"/tmp/{secrets.token_urlsafe(20)}.jpg"
             with open(new_file, "wb") as i:
                 i.write(resp.content)
-            new_file2 = f"/tmp/{secrets.token_urlsafe(20)}.png"
+            new_file2 = f"/tmp/{secrets.token_urlsafe(20)}.jpg"
             with open(new_file2, "wb") as i:
                 i.write(image)
-            if self.compare_images(new_file2, new_file):
+            if not self.compare_images(new_file2, new_file):
                 raise BrokenServiceException("Image upload does not work.")
+
+        elif self.variant_id == 3 or self.variant_id == 4:
+            try:
+                image = self.chain_db["image"]
+                email: str = self.chain_db["email"]
+                password: str = self.chain_db["password"]
+            except (IndexError, KeyError) as ex:
+                self.debug(f"error getting notes from db: {ex}")
+                raise BrokenServiceException("Previous putnoise failed.")
+            self.login_user(email, password)
+            resp = self.http_get('/auth/viewimages')
+            self.check_response(resp, 200, action="getting progress pics")
+            url = html.unescape(resp.text).split('<img class="img-fluid" src="')[-1].split('" alt="your image" style="width: 200px">')[0]
+            resp = self.http_get(url)
+            self.check_response(resp, 200, action="getting progress pic")
+            new_file = f"/tmp/{secrets.token_urlsafe(20)}.jpg"
+            with open(new_file, "wb") as i:
+                i.write(resp.content)
+            new_file2 = f"/tmp/{secrets.token_urlsafe(20)}.jpg"
+            with open(new_file2, "wb") as i:
+                i.write(image)
+            if not self.compare_images(new_file2, new_file):
+                raise BrokenServiceException("Image upload does not work.")
+
+
 
         else:
             raise EnoException("Wrong variant_id provided")
@@ -532,6 +600,9 @@ class ActivitytrackerChecker(BaseChecker):
                 If nothing is returned, the service status is considered okay.
                 The preferred way to report Errors in the service is by raising an appropriate EnoException
         """
+        # Edit a post, confirm that the post form contains the posts data, and actually perform an edit
+        # 0: public
+        # 1: private
         if self.variant_id == 0 or self.variant_id == 5:
             # Check edit functionality
             _, _, email, password = self.generate_userdata()
@@ -560,8 +631,8 @@ class ActivitytrackerChecker(BaseChecker):
                 raise BrokenServiceException("Post editing does not work")
 
             assert_in(new_text, mine, "Post editing does not work")
+        # check delete functionality
         elif self.variant_id == 1:
-            # check delete functionality
             _, _, email, password = self.generate_userdata()
 
             self.register_user(email, password)
@@ -582,14 +653,15 @@ class ActivitytrackerChecker(BaseChecker):
                     "Post deletion does not work.",
                     internal_message=f"{random_validation_text} is in {resp}",
                 )
+        # Deletes old posts
         elif self.variant_id == 2:
-            # Deletes old posts
             try:
                 self.http_get('/posts/delete_old')
             except Exception as e:
                 pass
+        # Checks whether own posts and friends posts page is available when logged in, and unavailable when logged out
         elif self.variant_id == 3:
-            # Checks whether own posts and friends posts page is available when logged in, and unavailable when logged out
+
             self.http_get('/auth/logout')
             resp = self.http_get('/posts/my')
             self.check_response(resp, 401, action='checking own posts')
@@ -606,9 +678,10 @@ class ActivitytrackerChecker(BaseChecker):
             self.check_response(resp, 401, action='Checking own posts')
             resp = self.http_get('/posts/friends')
             self.check_response(resp, 401, action='checking friends posts')
+        # recover a password
         elif self.variant_id == 4:
-            filename = "/tmp/" + secrets.token_urlsafe(10) + ".png"
-            self.generate_random_image(filename)
+            filename = "/tmp/" + secrets.token_urlsafe(10) + ".jpg"
+            self.generate_random_image(filename, kind='profiles')
             _, _, email, password = self.generate_userdata()
             self.register_user(email, password, filename, True)
 
@@ -624,13 +697,14 @@ class ActivitytrackerChecker(BaseChecker):
                                    'password': secrets.token_urlsafe(10) + "Aa1"
                                },
                                files={
-                                   'image': f
+                                   'image': (os.path.basename(filename), f, 'multipart/form-data')
                                })
                 self.check_response(resp, 303, self.POSTS_PAGE, "recovering password")
 
             resp = self.check_mine()
             print(resp)
             assert_in(to_find, resp, "Password recovery does not work")
+        # register with a weird email address
         elif self.variant_id == 6:
             # Register user with subdomain in email (which is valid!)
             random_data = secrets.token_urlsafe(16)
@@ -687,7 +761,7 @@ class ActivitytrackerChecker(BaseChecker):
                     post = re.search(self.pattern3, section)
                     if not post:
                         continue
-                    image_name = f"/tmp/tmp.png"
+                    image_name = f"/tmp/tmp.jpg"
                     self.generate_random_image(image_name)
                     print(email)
                     self.register_user(f"{email}.{secrets.token_urlsafe(2)}.{secrets.token_urlsafe(2)}.{secrets.token_urlsafe(2)}", password_my, image_name, True)
@@ -697,7 +771,7 @@ class ActivitytrackerChecker(BaseChecker):
                             "email": email,
                             "password": "hacked1234567890"
                         }, files={
-                            "image": image
+                            "image": (os.path.basename(image_name), image, 'multipart/form-data')
                         })
                     # get flag
                     resp = self.http_get(f"/posts/friends")
