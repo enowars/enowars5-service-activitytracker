@@ -8,7 +8,7 @@ use rocket_dyn_templates::Template;
 use serde_json::json;
 use rocket::response::{Flash, Redirect};
 use rocket::request::FlashMessage;
-use crate::models::users::{update_user_image, get_user_id, get_user_image, update_user};
+use crate::models::users::{update_user_image, get_user_id, update_user};
 use std::env;
 use file_diff::{diff};
 use argon2::{self};
@@ -211,7 +211,8 @@ pub async fn post_forgot(mut auth: Auth<'_>, conn: crate::PgDieselDbConn, post_d
     let user_id = get_user_id(&conn, email.clone()).await;
     pdata.image.persist_to(format!("{}.png", rand::thread_rng().gen_range(0..i32::MAX))).await.unwrap();
     let upload_image = pdata.image.path().unwrap();
-    let user_image = get_user_image(&conn, email.clone()).await;
+
+    let user_image = format!("{}profiles/{}.", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), email);
 
     let mut matching_image_found = false;
     let paths = fs::read_dir(format!("{}profiles", env::var("DATA_DIR").unwrap_or("/".to_string()))).unwrap();

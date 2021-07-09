@@ -16,7 +16,7 @@ services:
     # Mount the data folder writable, so that information can be persisted across restarts.
     volumes:
       - ./data/:/data:rw
-    command: postgres -c 'max_connections=512'
+    command: postgres -c 'max_connections=1024'
     mem_limit: 2G
     memswap_limit: 4G
     ulimits:
