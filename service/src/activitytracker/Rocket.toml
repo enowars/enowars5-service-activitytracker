@@ -1,6 +1,6 @@
 [global]
 keep_alive = 5
-workers = 1024
+workers = 8
 secret_key = "eZ8J/CJ2LuGx/lI481zxWK/3BnIy+LYjhwSZnKkdrRY="
 port = 4242
 
