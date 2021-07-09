@@ -13,6 +13,7 @@ import os
 from PIL import Image
 import secrets
 import re
+import pickle
 
 from enochecker_core import CheckerTaskMessage
 
@@ -34,8 +35,8 @@ class ActivitytrackerChecker(BaseChecker):
 
     # EDIT YOUR CHECKER PARAMETERS
     flag_variants = 2
-    noise_variants = 2
-    havoc_variants = 6
+    noise_variants = 3
+    havoc_variants = 7
     exploit_variants = 2
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
@@ -63,6 +64,7 @@ class ActivitytrackerChecker(BaseChecker):
         email = barnum.create_email(name=(firstname, lastname)).lower()
         return firstname, lastname, email, password
 
+
     @staticmethod
     def generate_random_image(filename):
         im = Image.open('images/profile.png')
@@ -73,6 +75,20 @@ class ActivitytrackerChecker(BaseChecker):
                 pixels[x, y] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         im.save(filename, format='png')
         return filename
+
+    @staticmethod
+    def compare_images(file1, file2):
+        im1 = Image.open(file1)
+        im2 = Image.open(file2)
+        pixels1 = im1.load()
+        pixels2 = im2.load()
+        if im1.size != im2.size:
+            return False
+        for x in range(im1.size[0]):
+            for y in range(im2.size[1]):
+                if pixels1[x, y] != pixels2[x, y]:
+                    return False
+        return True
 
     @staticmethod
     def check_response(resp, status, location="", action="performing request"):
@@ -118,13 +134,23 @@ class ActivitytrackerChecker(BaseChecker):
                               })
         self.check_response(resp, 303, self.POSTS_PAGE, "logging in user")
 
-    def create_post(self, contents, visibility='public', protected=False):
-        resp = self.http_post('/posts/insert', files={
-            "body": contents,
-            "visibility": visibility,
-            "protected": "true" if protected else "false"
-        },
-                              allow_redirects=False)
+    def create_post(self, contents, visibility='public', protected=False, image=""):
+        if image:
+            with open(image, 'rb') as i:
+                resp = self.http_post('/posts/insert', files={
+                    "body": contents,
+                    "visibility": visibility,
+                    "protected": "true" if protected else "false",
+                    "image": (os.path.basename(image), i, 'multipart/form-data')
+                },
+                                      allow_redirects=False)
+        else:
+            resp = self.http_post('/posts/insert', files={
+                "body": contents,
+                "visibility": visibility,
+                "protected": "true" if protected else "false"
+            },
+                                  allow_redirects=False)
         self.check_response(resp, 303, self.POSTS_PAGE, "creating posts")
 
     def add_friend(self, email):
@@ -404,7 +430,22 @@ class ActivitytrackerChecker(BaseChecker):
                 "password": password,
                 "text": text
             }
+        elif self.variant_id == 2:
+            _, _, email, password = self.generate_userdata()
+            self.register_user(email, password)
 
+            image_name = "/tmp/" + secrets.token_urlsafe(16) + ".png"
+            self.generate_random_image(image_name)
+
+            self.create_post("Look at this cool image!",
+                             "public",
+                             True,
+                             image_name)
+            with open(image_name, 'rb') as i:
+                self.chain_db = {
+                    "image": i.read(),
+                    "image_name": image_name
+                }
         else:
             raise EnoException("Wrong variant_id provided")
 
@@ -427,7 +468,7 @@ class ActivitytrackerChecker(BaseChecker):
                 text: str = self.chain_db["text"]
             except (IndexError, KeyError) as ex:
                 self.debug(f"error getting notes from db: {ex}")
-                raise BrokenServiceException("Previous putflag failed.")
+                raise BrokenServiceException("Previous putnoise failed.")
 
             # Let´s obtain our note.
             resp = self.check_pages(text)
@@ -446,7 +487,7 @@ class ActivitytrackerChecker(BaseChecker):
                 text: str = self.chain_db["text"]
             except (IndexError, KeyError) as ex:
                 self.debug(f"error getting notes from db: {ex}")
-                raise BrokenServiceException("Previous putflag failed.")
+                raise BrokenServiceException("Previous putnoise failed.")
 
             self.login_user(username, password)
 
@@ -460,6 +501,25 @@ class ActivitytrackerChecker(BaseChecker):
             assert_in(
                 username, resp, "Private posts are not working"
             )
+        elif self.variant_id == 2:
+            try:
+                image = self.chain_db["image"]
+                image_name = self.chain_db["image_name"]
+            except (IndexError, KeyError) as ex:
+                self.debug(f"error getting notes from db: {ex}")
+                raise BrokenServiceException("Previous putnoise failed.")
+            image_name = os.path.basename(image_name)
+            resp = self.http_get(f'/posts/imgs/{image_name}')
+            self.check_response(resp, 200, action="getting image")
+            new_file = f"/tmp/{secrets.token_urlsafe(20)}.png"
+            with open(new_file, "wb") as i:
+                i.write(resp.content)
+            new_file2 = f"/tmp/{secrets.token_urlsafe(20)}.png"
+            with open(new_file2, "wb") as i:
+                i.write(image)
+            if self.compare_images(new_file2, new_file):
+                raise BrokenServiceException("Image upload does not work.")
+
         else:
             raise EnoException("Wrong variant_id provided")
 
@@ -571,6 +631,12 @@ class ActivitytrackerChecker(BaseChecker):
             resp = self.check_mine()
             print(resp)
             assert_in(to_find, resp, "Password recovery does not work")
+        elif self.variant_id == 6:
+            # Register user with subdomain in email (which is valid!)
+            random_data = secrets.token_urlsafe(16)
+            email = f"{random_data}@subdomain.hack.me"
+            _, _, _, password = self.generate_userdata()
+            self.register_user(email, password)
 
 
         else:
