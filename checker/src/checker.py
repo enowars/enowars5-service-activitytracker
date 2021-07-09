@@ -35,7 +35,7 @@ class ActivitytrackerChecker(BaseChecker):
     # EDIT YOUR CHECKER PARAMETERS
     flag_variants = 2
     noise_variants = 2
-    havoc_variants = 3
+    havoc_variants = 6
     exploit_variants = 2
     service_name = "activitytracker"
     port = 4242  # The port will automatically be picked up as default by self.connect and self.http.
@@ -56,6 +56,14 @@ class ActivitytrackerChecker(BaseChecker):
         self.http_session.verify = True
 
     @staticmethod
+    def generate_userdata():
+        firstname, lastname = barnum.create_name()
+        lastname += str(random.randint(1, 1000))
+        password = barnum.create_pw(length=10)
+        email = barnum.create_email(name=(firstname, lastname)).lower()
+        return firstname, lastname, email, password
+
+    @staticmethod
     def generate_random_image(filename):
         im = Image.open('images/profile.png')
         # im = Image.new('RGB', (30, 30))
@@ -67,7 +75,7 @@ class ActivitytrackerChecker(BaseChecker):
         return filename
 
     @staticmethod
-    def check_response(resp, status, location, action="performing request"):
+    def check_response(resp, status, location="", action="performing request"):
         if resp.status_code != status:
             raise BrokenServiceException(f"Unexpected status code after {action}: {resp.status_code}")
         if location:
@@ -158,12 +166,7 @@ class ActivitytrackerChecker(BaseChecker):
 
         if self.variant_id == 0:
             # First we need to register a user
-            firstname, lastname = barnum.create_name()
-            lastname += str(random.randint(1, 1000))
-            company = barnum.create_company_name()
-            jobtitle = barnum.create_job_title()
-            password = barnum.create_pw(length=10)
-            email = barnum.create_email(name=(firstname, lastname)).lower()
+            _, _, email, password = self.generate_userdata()
 
             self.register_user(email, password)
 
@@ -182,19 +185,12 @@ class ActivitytrackerChecker(BaseChecker):
             # self.http_get('/auth/logout')
 
             original_email = email
-            firstname, lastname = secrets.token_urlsafe(10), secrets.token_urlsafe(10)
-            checker_email = barnum.create_email(name=(firstname, lastname)).lower()
-            checker_password = barnum.create_pw(length=10)
+            _, _, checker_email, checker_password = self.generate_userdata()
 
             self.register_user(checker_email, checker_password)
             # self.http_get('/auth/logout')
 
-            firstname, lastname = barnum.create_name()
-            lastname += str(random.randint(1, 1000))
-            company = barnum.create_company_name()
-            jobtitle = barnum.create_job_title()
-            password = barnum.create_pw(length=10)
-            email = barnum.create_email(name=(firstname, lastname)).lower()
+            _, _, email, password = self.generate_userdata()
 
             self.register_user(email, password)
 
@@ -213,23 +209,11 @@ class ActivitytrackerChecker(BaseChecker):
                 "password": checker_password,
             }
         elif self.variant_id == 1:
-            firstname, lastname = secrets.token_urlsafe(10), secrets.token_urlsafe(10)
-            checker_email = barnum.create_email(name=(firstname, lastname)).lower()
-            checker_password = barnum.create_pw(length=10)
+            _, _, checker_email, checker_password = self.generate_userdata()
             self.register_user(checker_email, checker_password)
 
             # First we need to register a user
-            firstname, lastname = barnum.create_name()
-            company = barnum.create_company_name()
-            jobtitle = barnum.create_job_title()
-            password = barnum.create_pw(length=10)
-
-            boss_firstname, boss_lastname = barnum.create_name()
-            boss_password = barnum.create_pw(length=10)
-
-            email, boss_email = self.generate_matching_emails((firstname.lower(), lastname.lower()),
-                                                              (boss_firstname.lower(), boss_lastname.lower()),
-                                                              company)
+            _, _, email, password = self.generate_userdata()
 
             self.register_user(email, password)
 
@@ -281,11 +265,13 @@ class ActivitytrackerChecker(BaseChecker):
 
     def check_mine(self):
         resp = self.http_get(f"/posts/my")
+        self.check_response(resp, 200, action="getting own posts")
         t = html.unescape(resp.text)
         return t
 
     def check_friends(self):
         resp = self.http_get(f"/posts/friends")
+        self.check_response(resp, 200, action="getting friend posts")
         t = html.unescape(resp.text)
         return t
 
@@ -394,9 +380,7 @@ class ActivitytrackerChecker(BaseChecker):
         """
         if self.variant_id == 0 or self.variant_id == 1:
             # A public or private post
-            firstname, lastname = barnum.create_name()
-            password = barnum.create_pw(length=10)
-            email = barnum.create_email(name=(firstname, lastname)).lower()
+            firstname, lastname, email, password = self.generate_userdata()
             company = barnum.create_company_name()
             jobtitle = barnum.create_job_title()
             text = secrets.token_urlsafe(128)
@@ -488,11 +472,9 @@ class ActivitytrackerChecker(BaseChecker):
                 If nothing is returned, the service status is considered okay.
                 The preferred way to report Errors in the service is by raising an appropriate EnoException
         """
-        if self.variant_id == 0:
+        if self.variant_id == 0 or self.variant_id == 5:
             # Check edit functionality
-            firstname, lastname = barnum.create_name()
-            password = barnum.create_pw(length=10)
-            email = barnum.create_email(name=(firstname, lastname)).lower()
+            _, _, email, password = self.generate_userdata()
             text = secrets.token_urlsafe(128)
 
             self.register_user(email, password)
@@ -500,17 +482,27 @@ class ActivitytrackerChecker(BaseChecker):
             self.create_post(text,
                              "public" if self.variant_id == 0 else "private",
                              False)
-            resp = self.check_mine()
-            t = resp.split("\">Edit</a>")[0]
-            url = t.split("href=\"")[-1]
 
-            resp = self.http_get(url)
-            assert_in(text, html.unescape(resp.text), "Post editing does not work")
+            resp = self.http_get(f"/posts/update/{email}/1")
+            self.check_response(resp, 200, action="Editing post")
+
+            post_id = resp.text.split('<input name="id" class="form-control" hidden value="')[-1].split('">')[0]
+
+            new_text = secrets.token_urlsafe(128)
+            resp = self.http_post('/posts/update', data={
+                'body': new_text,
+                'id': post_id
+            })
+            self.check_response(resp, 303, action="Editing post")
+
+            mine = self.check_mine()
+            if text in mine:
+                raise BrokenServiceException("Post editing does not work")
+
+            assert_in(new_text, mine, "Post editing does not work")
         elif self.variant_id == 1:
             # check delete functionality
-            firstname, lastname = barnum.create_name()
-            password = barnum.create_pw(length=10)
-            email = barnum.create_email(name=(firstname, lastname)).lower()
+            _, _, email, password = self.generate_userdata()
 
             self.register_user(email, password)
 
@@ -531,11 +523,56 @@ class ActivitytrackerChecker(BaseChecker):
                     internal_message=f"{random_validation_text} is in {resp}",
                 )
         elif self.variant_id == 2:
+            # Deletes old posts
             try:
                 self.http_get('/posts/delete_old')
             except Exception as e:
                 pass
-        # TODO: check file upload
+        elif self.variant_id == 3:
+            # Checks whether own posts and friends posts page is available when logged in, and unavailable when logged out
+            self.http_get('/auth/logout')
+            resp = self.http_get('/posts/my')
+            self.check_response(resp, 401, action='checking own posts')
+            resp = self.http_get('/posts/friends')
+            self.check_response(resp, 401, action='checking friends posts')
+            _, _, email, password = self.generate_userdata()
+            self.register_user(email, password)
+            resp = self.http_get('/posts/my')
+            self.check_response(resp, 200, action='Checking own posts')
+            resp = self.http_get('/posts/friends')
+            self.check_response(resp, 200, action='Checking friends posts')
+            self.http_get('/auth/logout')
+            resp = self.http_get('/posts/my')
+            self.check_response(resp, 401, action='Checking own posts')
+            resp = self.http_get('/posts/friends')
+            self.check_response(resp, 401, action='checking friends posts')
+        elif self.variant_id == 4:
+            filename = "/tmp/" + secrets.token_urlsafe(10) + ".png"
+            self.generate_random_image(filename)
+            _, _, email, password = self.generate_userdata()
+            self.register_user(email, password, filename, True)
+
+            to_find = secrets.token_urlsafe(100)
+            self.create_post(to_find, 'private')
+
+            self.http_get('/auth/logout')
+
+            with open(filename, 'rb') as f:
+                resp = self.http_post('/auth/forgot',
+                               data={
+                                   'email': email,
+                                   'password': secrets.token_urlsafe(10) + "Aa1"
+                               },
+                               files={
+                                   'image': f
+                               })
+                self.check_response(resp, 303, self.POSTS_PAGE, "recovering password")
+
+            resp = self.check_mine()
+            print(resp)
+            assert_in(to_find, resp, "Password recovery does not work")
+
+
         else:
             raise EnoException("Wrong variant_id provided")
 

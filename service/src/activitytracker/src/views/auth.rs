@@ -12,7 +12,7 @@ use crate::models::users::{update_user_image, get_user_id, update_user};
 use std::env;
 use file_diff::{diff};
 use argon2::{self};
-use chrono::{Datelike, Utc};
+use chrono::{Datelike, Utc, Timelike};
 use rand::Rng;
 
 use rand::random;
@@ -170,9 +170,8 @@ pub async fn post_addimage(user: User, mut post_data: Form<ImageForm<'_>>) -> Fl
     let email = user.email();
 
     let now = Utc::now();
-    let (_, year) = now.year_ce();
 
-    let absolute_path: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.{}-{:02}-{:02}.png", email, year, now.month(), now.day()));
+    let absolute_path: String = format!("{}profiles/{}", env::var("DATA_DIR").unwrap_or("imgs/".to_string()).as_str(), format!("{}.{}-{:02}-{:02}.png", email, now.hour(), now.minute(), now.second()));
     post_data.image.copy_to(absolute_path).await.unwrap();
 
     Flash::success(
